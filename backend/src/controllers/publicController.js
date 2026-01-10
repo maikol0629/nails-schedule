@@ -1,4 +1,4 @@
-const { PrismaClient } = require('@prisma/client');
+const { PrismaClient, AccountStatus } = require('@prisma/client');
 
 const prisma = new PrismaClient();
 
@@ -64,7 +64,7 @@ function getDayKeyFromDate(date) {
 	return days[date.getDay()];
 }
 
-async function validateNoOverlapPublic({ userId, date, time, duration }) {
+async function validateNoOverlapPublic({ supabaseUserId, date, time, duration }) {
 	const dateOnly = parseDateOnly(date);
 	if (!dateOnly) {
 		throw new Error('Fecha inválida para validación de solapamiento');
@@ -78,7 +78,7 @@ async function validateNoOverlapPublic({ userId, date, time, duration }) {
 
 	const sameDayAppointments = await prisma.appointment.findMany({
 		where: {
-			userId,
+			supabaseUserId,
 			date: dateOnly,
 		},
 	});
@@ -99,7 +99,7 @@ async function validateNoOverlapPublic({ userId, date, time, duration }) {
 	return true;
 }
 
-async function computeAvailableSlotsForDate({ userId, date, serviceId }) {
+async function computeAvailableSlotsForDate({ supabaseUserId, date, serviceId }) {
 	const dateOnly = parseDateOnly(date);
 	if (!dateOnly) {
 		throw new Error('Fecha inválida');
@@ -109,7 +109,7 @@ async function computeAvailableSlotsForDate({ userId, date, serviceId }) {
 	const service = await prisma.service.findFirst({
 		where: {
 			id: serviceId,
-			userId,
+			supabaseUserId,
 			active: true,
 		},
 	});
@@ -120,7 +120,7 @@ async function computeAvailableSlotsForDate({ userId, date, serviceId }) {
 
 	// Horario laboral del estilista (con valores por defecto si no hay configuración)
 	const existingBusinessHours = await prisma.businessHours.findFirst({
-		where: { userId },
+		where: { supabaseUserId },
 	});
 
 	const businessHours = existingBusinessHours || {
@@ -146,7 +146,7 @@ async function computeAvailableSlotsForDate({ userId, date, serviceId }) {
 	// Verificar día bloqueado: si está bloqueado, no hay disponibilidad
 	const blocked = await prisma.blockedDay.findFirst({
 		where: {
-			userId,
+			supabaseUserId,
 			date: dateOnly,
 		},
 	});
@@ -177,7 +177,7 @@ async function computeAvailableSlotsForDate({ userId, date, serviceId }) {
 	// Citas existentes para ese día
 	const appointments = await prisma.appointment.findMany({
 		where: {
-			userId,
+			supabaseUserId,
 			date: dateOnly,
 		},
 	});
@@ -225,71 +225,94 @@ async function computeAvailableSlotsForDate({ userId, date, serviceId }) {
 	});
 }
 
-// 1. Información pública del estilista (stub básico)
+async function getActiveStylistBySlug(slug) {
+	if (!slug) {
+		const error = new Error('slug es requerido');
+		error.status = 400;
+		throw error;
+	}
+
+	const profile = await prisma.stylistProfile.findUnique({
+		where: { slug },
+		include: { user: true },
+	});
+
+	if (!profile || !profile.user) {
+		const error = new Error('Estilista no encontrado');
+		error.status = 404;
+		throw error;
+	}
+
+	if (profile.user.status !== AccountStatus.ACTIVE) {
+		const error = new Error('Estilista no disponible');
+		error.status = 404;
+		throw error;
+	}
+
+	return { profile, user: profile.user };
+}
+
+// 1. Información pública del estilista (por slug, datos básicos)
 async function getStylistInfo(req, res) {
-	const { userId } = req.params;
+	const { slug } = req.params;
 
 	try {
-		// TODO: Integrar con un modelo StylistProfile si se define en el schema.
-		// Por ahora devolvemos datos básicos hardcodeados junto con el userId.
+		const { profile, user } = await getActiveStylistBySlug(slug);
+
 		return res.json({
-			userId,
-			name: 'Stylist',
-			bio: null,
-			phone: null,
-			email: null,
-			address: null,
+			slug: profile.slug,
+			businessName: profile.businessName,
+			ownerName: profile.ownerName,
+			category: profile.category,
+			city: profile.city,
+			country: profile.country,
+			primaryColor: profile.primaryColor,
+			logoUrl: profile.logoUrl,
+			coverImageUrl: profile.coverImageUrl,
+			instagram: profile.instagram,
+			status: user.status,
 		});
 	} catch (error) {
 		// eslint-disable-next-line no-console
 		console.error('Error fetching public stylist info:', error);
 		return res
-			.status(500)
-			.json({ message: 'Error al obtener la información pública del estilista' });
+			.status(error.status || 500)
+			.json({ message: error.message || 'Error al obtener la información pública del estilista' });
 	}
 }
 
-// 1b. Perfil público del estilista (StylistProfile)
-async function getStylistProfile(req, res) {
-	const { userId } = req.params;
+// 1b. Perfil público completo (incluye user) por slug
+async function getStylistBySlug(req, res) {
+	const { slug } = req.params;
 
 	try {
-		const profile = await prisma.stylistProfile.findUnique({
-			where: { userId },
-		});
-
-		if (profile) {
-			return res.json(profile);
-		}
-
-		// Si no existe perfil, devolvemos datos por defecto para el usuario.
-		return res.json({
-			userId,
-			name: 'Stylist',
-			bio: null,
-			phone: null,
-			email: null,
-			instagram: null,
-			address: null,
-			photoUrl: null,
-		});
+		const { profile } = await getActiveStylistBySlug(slug);
+		return res.json(profile);
 	} catch (error) {
 		// eslint-disable-next-line no-console
-		console.error('Error fetching public stylist profile:', error);
+		console.error('Error fetching stylist by slug:', error);
 		return res
-			.status(500)
-			.json({ message: 'Error al obtener el perfil público del estilista' });
+			.status(error.status || 500)
+			.json({ message: error.message || 'Error al obtener el perfil del estilista' });
 	}
+}
+
+// Mantener compatibilidad: getStylistProfile ahora usa slug internamente
+async function getStylistProfile(req, res) {
+	return getStylistBySlug(req, res);
 }
 
 // 2. Servicios públicos
 async function getPublicServices(req, res) {
-	const { userId } = req.params;
+	const { slug } = req.params;
 
 	try {
+		const { user } = await getActiveStylistBySlug(slug);
+		const supabaseUserId = user.supabaseAuthId;
+
 		const services = await prisma.service.findMany({
 			where: {
-				userId,
+				supabaseUserId,
 				active: true,
 			},
 			select: {
@@ -308,18 +331,21 @@ async function getPublicServices(req, res) {
 		// eslint-disable-next-line no-console
 		console.error('Error fetching public services:', error);
 		return res
-			.status(500)
-			.json({ message: 'Error al obtener los servicios públicos' });
+			.status(error.status || 500)
+			.json({ message: error.message || 'Error al obtener los servicios públicos' });
 	}
 }
 
 // 3. Portafolio público
 async function getPublicPortfolio(req, res) {
-	const { userId } = req.params;
+	const { slug } = req.params;
 
 	try {
+		const { user } = await getActiveStylistBySlug(slug);
+		const supabaseUserId = user.supabaseAuthId;
+
 		const images = await prisma.portfolioImage.findMany({
-			where: { userId },
+			where: { supabaseUserId },
 			include: {
 				service: {
 					select: {
@@ -337,14 +363,14 @@ async function getPublicPortfolio(req, res) {
 		// eslint-disable-next-line no-console
 		console.error('Error fetching public portfolio:', error);
 		return res
-			.status(500)
-			.json({ message: 'Error al obtener el portafolio público' });
+			.status(error.status || 500)
+			.json({ message: error.message || 'Error al obtener el portafolio público' });
 	}
 }
 
 // 4. Slots disponibles públicos
 async function getAvailableSlots(req, res) {
-	const { userId } = req.params;
+	const { slug } = req.params;
 	const { date, serviceId } = req.query;
 
 	if (!date || !serviceId) {
@@ -354,8 +380,11 @@ async function getAvailableSlots(req, res) {
 	}
 
 	try {
+		const { user } = await getActiveStylistBySlug(slug);
+		const supabaseUserId = user.supabaseAuthId;
+
 		const slots = await computeAvailableSlotsForDate({
-			userId,
+			supabaseUserId,
 			date,
 			serviceId,
 		});
@@ -365,14 +394,14 @@ async function getAvailableSlots(req, res) {
 		// eslint-disable-next-line no-console
 		console.error('Error fetching available slots:', error);
 		return res
-			.status(500)
-			.json({ message: 'Error al obtener los horarios disponibles' });
+			.status(error.status || 500)
+			.json({ message: error.message || 'Error al obtener los horarios disponibles' });
 	}
 }
 
 // 5. Crear cita pública
 async function createPublicAppointment(req, res) {
-	const { userId } = req.params;
+	const { slug } = req.params;
 	const {
 		clientName,
 		clientPhone,
@@ -393,7 +422,7 @@ async function createPublicAppointment(req, res) {
 		const service = await prisma.service.findFirst({
 			where: {
 				id: serviceIdStr,
-				userId,
+				// filtraremos por supabaseUserId luego de resolver el estilista
 				active: true,
 			},
 		});
@@ -419,9 +448,13 @@ async function createPublicAppointment(req, res) {
 				.json({ message: 'La cita debe ser en el futuro' });
 		}
 
+		// Resolver estilista por slug y obtener supabaseUserId
+		const { user } = await getActiveStylistBySlug(slug);
+		const supabaseUserId = user.supabaseAuthId;
+
 		// Verificar que la hora esté en los slots disponibles
 		const slots = await computeAvailableSlotsForDate({
-			userId,
+			supabaseUserId,
 			date,
 			serviceId: serviceIdStr,
 		});
@@ -435,7 +468,7 @@ async function createPublicAppointment(req, res) {
 		// Encontrar o crear cliente por teléfono
 		let client = await prisma.client.findFirst({
 			where: {
-				userId,
+				supabaseUserId,
 				phone: clientPhone,
 			},
 		});
@@ -451,7 +484,7 @@ async function createPublicAppointment(req, res) {
 		} else {
 			client = await prisma.client.create({
 				data: {
-					userId,
+					supabaseUserId,
 					name: clientName,
 					phone: clientPhone,
 					email: clientEmail || null,
@@ -463,7 +496,7 @@ async function createPublicAppointment(req, res) {
 		// Validar solapamiento como salvaguarda adicional
 		const duration = service.durationMinutes;
 		const noOverlap = await validateNoOverlapPublic({
-			userId,
+			supabaseUserId,
 			date,
 			time,
 			duration,
@@ -479,7 +512,7 @@ async function createPublicAppointment(req, res) {
 		const dateOnly = parseDateOnly(date);
 		const appointment = await prisma.appointment.create({
 			data: {
-				userId,
+				supabaseUserId,
 				clientId: client.id,
 				serviceId: serviceIdStr,
 				date: dateOnly,
@@ -506,6 +539,7 @@ async function createPublicAppointment(req, res) {
 
 module.exports = {
 	getStylistInfo,
+	getStylistBySlug,
 	getStylistProfile,
 	getPublicServices,
 	getPublicPortfolio,

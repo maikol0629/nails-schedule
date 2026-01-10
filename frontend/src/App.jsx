@@ -4,9 +4,10 @@ import { Toaster } from 'react-hot-toast';
 import { AuthProvider } from './context/AuthContext.jsx';
 import ProtectedRoute from './components/ProtectedRoute.jsx';
 import Layout from './components/Layout.jsx';
+import SuperAdminLayout from './components/SuperAdminLayout.jsx';
 import ErrorBoundary from './components/ErrorBoundary.jsx';
 
-import Login from './pages/Login.jsx';
+import StylistLogin from './pages/Login.jsx';
 import Dashboard from './pages/Dashboard.jsx';
 import ServicesPage from './pages/ServicesPage.jsx';
 import AppointmentsPage from './pages/AppointmentsPage.jsx';
@@ -15,6 +16,16 @@ import PortfolioPage from './pages/PortfolioPage.jsx';
 import SettingsPage from './pages/admin/SettingsPage.jsx';
 import ProfilePage from './pages/admin/ProfilePage.jsx';
 import LandingPage from './pages/public/LandingPage.jsx';
+import DynamicLanding from './pages/public/DynamicLanding.jsx';
+import SuperAdminLogin from './pages/super-admin/Login.jsx';
+import SuperAdminDashboard from './pages/super-admin/Dashboard.jsx';
+import PendingApprovals from './pages/super-admin/PendingApprovals.jsx';
+import StylistsList from './pages/super-admin/StylistsList.jsx';
+import AuditLogs from './pages/super-admin/AuditLogs.jsx';
+import StylistRegister from './pages/auth/StylistRegister.jsx';
+import VerifyEmail from './pages/auth/VerifyEmail.jsx';
+import VerifyWhatsApp from './pages/auth/VerifyWhatsApp.jsx';
+import VerifyEmailToken from './pages/auth/VerifyEmailToken.jsx';
 
 export default function App() {
   return (
@@ -25,11 +36,60 @@ export default function App() {
           <Routes>
         {/* Rutas públicas */}
         <Route path="/" element={<LandingPage />} />
-        <Route path="/book" element={<LandingPage />} />
+        <Route path="/:slug" element={<DynamicLanding />} />
+        <Route path="/verify-email/:token" element={<VerifyEmailToken />} />
 
-        {/* Auth admin */}
-        <Route path="/admin/login" element={<Login />} />
-        <Route path="/admin" element={<Login />} />
+        {/* Auth estilistas */}
+        <Route path="/admin/register" element={<StylistRegister />} />
+        <Route path="/admin/verify-email" element={<VerifyEmail />} />
+        <Route path="/admin/verify-whatsapp" element={<VerifyWhatsApp />} />
+        <Route path="/admin/login" element={<StylistLogin />} />
+        <Route path="/admin" element={<StylistLogin />} />
+
+        {/* Auth super admin */}
+        <Route path="/super-admin/login" element={<SuperAdminLogin />} />
+
+        {/* Super admin (requiere role SUPER_ADMIN) */}
+        <Route
+          path="/super-admin/dashboard"
+          element={(
+            <ProtectedRoute requiredRole="SUPER_ADMIN">
+              <SuperAdminLayout>
+                <SuperAdminDashboard />
+              </SuperAdminLayout>
+            </ProtectedRoute>
+          )}
+        />
+        <Route
+          path="/super-admin/pending-approvals"
+          element={(
+            <ProtectedRoute requiredRole="SUPER_ADMIN">
+              <SuperAdminLayout>
+                <PendingApprovals />
+              </SuperAdminLayout>
+            </ProtectedRoute>
+          )}
+        />
+        <Route
+          path="/super-admin/stylists"
+          element={(
+            <ProtectedRoute requiredRole="SUPER_ADMIN">
+              <SuperAdminLayout>
+                <StylistsList />
+              </SuperAdminLayout>
+            </ProtectedRoute>
+          )}
+        />
+        <Route
+          path="/super-admin/audit-logs"
+          element={(
+            <ProtectedRoute requiredRole="SUPER_ADMIN">
+              <SuperAdminLayout>
+                <AuditLogs />
+              </SuperAdminLayout>
+            </ProtectedRoute>
+          )}
+        />
 
         {/* Rutas admin protegidas */}
         <Route

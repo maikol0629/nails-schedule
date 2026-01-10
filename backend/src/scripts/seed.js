@@ -1,228 +1,415 @@
 /* eslint-disable no-console */
 
-// Script de seed para datos de prueba
+// Script de seed para datos multi-tenant
 // Ejecutar con: node src/scripts/seed.js
 
 const path = require('path');
 require('dotenv').config({ path: path.resolve(__dirname, '../../.env') });
 
-const { PrismaClient } = require('@prisma/client');
+const {
+	AccountStatus,
+	UserRole,
+	BusinessCategory,
+	ServiceCategory,
+} = require('@prisma/client');
+
+const prisma = require('../config/prisma');
 const { supabase } = require('../config/supabase');
 
-const prisma = new PrismaClient();
+const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
 
-const TEST_EMAIL = process.env.SEED_STYLIST_EMAIL || 'stylist.demo@example.com';
-const TEST_PASSWORD = process.env.SEED_STYLIST_PASSWORD || 'DemoPass123!';
+const SUPER_ADMIN_EMAIL = process.env.SEED_SUPERADMIN_EMAIL || 'admin@tuapp.com';
+const SUPER_ADMIN_PASSWORD = process.env.SEED_SUPERADMIN_PASSWORD || 'Admin123!';
 
-async function main() {
-	console.log('Iniciando seed de datos de prueba...');
+const STYLISTS = [
+	{
+		label: 'Barbería clásica',
+		email: process.env.SEED_BARBERSHOP_EMAIL || 'barberia.clasica@tuapp.com',
+		password: process.env.SEED_BARBERSHOP_PASSWORD || 'Stylist123!',
+		slug: 'barberia-clasica',
+		businessName: 'Barbería Clásica',
+		ownerName: 'Carlos Barber',
+		category: BusinessCategory.BARBERSHOP,
+		status: AccountStatus.ACTIVE,
+		primaryColor: '#0EA5E9',
+	},
+	{
+		label: 'Salón elegante',
+		email: process.env.SEED_HAIR_SALON_EMAIL || 'salon.elegante@tuapp.com',
+		password: process.env.SEED_HAIR_SALON_PASSWORD || 'Stylist123!',
+		slug: 'salon-elegante',
+		businessName: 'Salón Elegante',
+		ownerName: 'María Estilo',
+		category: BusinessCategory.HAIR_SALON,
+		status: AccountStatus.ACTIVE,
+		primaryColor: '#EC4899',
+	},
+	{
+		label: 'Nails spa (pendiente aprobación)',
+		email: process.env.SEED_NAIL_SPA_EMAIL || 'nails.spa@tuapp.com',
+		password: process.env.SEED_NAIL_SPA_PASSWORD || 'Stylist123!',
+		slug: 'nails-spa',
+		businessName: 'Nails Spa',
+		ownerName: 'Laura Nails',
+		category: BusinessCategory.NAIL_SPA,
+		status: AccountStatus.PENDING_APPROVAL,
+		primaryColor: '#A855F7',
+	},
+];
 
-	// 1. Estilista de prueba (Supabase Auth + perfil + horarios)
-	console.log('\n[1] Creando / obteniendo estilista de prueba en Supabase Auth...');
-
-	// Intentar encontrar usuario existente por email
-	// NOTA: Supabase no permite buscar por email desde el cliente anon de forma directa;
-	// por simplicidad en este script asumimos que crear múltiples usuarios de prueba
-	// no es crítico en desarrollo. Si ya existe, simplemente reutilizamos el más reciente.
-	const uniqueSuffix = Date.now();
-	const email = TEST_EMAIL.replace('@', `+${uniqueSuffix}@`);
-
+async function ensureSupabaseUser(email, password, fullName) {
+	// Este helper crea el usuario en Supabase si no existe.
+	// Si ya existe, intenta iniciar sesión para obtener su id.
 	const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
 		email,
-		password: TEST_PASSWORD,
+		password,
 		options: {
-			data: {
-				full_name: 'Estilista Demo',
-			},
+			data: { full_name: fullName },
 		},
 	});
 
-	if (signUpError || !signUpData?.user) {
-		console.error('Error creando usuario de prueba en Supabase:', signUpError);
-		throw new Error('No se pudo crear el usuario de prueba en Supabase');
+	if (!signUpError && signUpData?.user) {
+		return signUpData.user.id;
 	}
 
-	const userId = signUpData.user.id;
-	console.log(`✓ Usuario creado: ${email}`);
+	// Si el usuario ya existe, intentamos iniciar sesión para recuperar su id
+	const message = (signUpError && signUpError.message ? signUpError.message : '').toLowerCase();
+	if (message.includes('already') || message.includes('registered') || message.includes('exists')) {
+		const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+			email,
+			password,
+		});
+		if (signInError || !signInData?.user) {
+			console.error('[seed] Supabase user existe pero no se pudo iniciar sesión', signInError);
+			throw new Error('No se pudo recuperar el usuario de Supabase');
+		}
+		return signInData.user.id;
+	}
 
-	// Guardar como estilista principal en AppSettings
-	await prisma.appSettings.upsert({
-		where: { id: 1 },
-		create: { id: 1, primaryStylistId: userId },
-		update: { primaryStylistId: userId },
+	console.error('[seed] Error creando usuario en Supabase:', signUpError);
+	throw new Error('No se pudo crear el usuario en Supabase');
+}
+
+async function ensureAppUser({ email, password, role, status, fullName }) {
+	// Buscar usuario de aplicación existente por email
+	let appUser = await prisma.user.findUnique({ where: { email } });
+
+	if (appUser) {
+		// Aseguramos que tenga el rol y estado deseados
+		if (appUser.role !== role || appUser.status !== status) {
+			appUser = await prisma.user.update({
+				where: { email },
+				data: { role, status },
+			});
+		}
+		return appUser;
+	}
+
+	// Si no existe en Prisma, nos aseguramos de tener el usuario en Supabase
+	const supabaseAuthId = await ensureSupabaseUser(email, password, fullName);
+
+	appUser = await prisma.user.create({
+		data: {
+			email,
+			supabaseAuthId,
+			role,
+			status,
+		},
+	});
+
+	return appUser;
+}
+
+function getServicesForCategory(businessCategory) {
+	if (businessCategory === BusinessCategory.BARBERSHOP) {
+		return [
+			{
+				name: 'Corte clásico',
+				description: 'Corte de barba y cabello con estilo tradicional.',
+				durationMinutes: 45,
+				price: 30000,
+				category: ServiceCategory.CUT,
+			},
+			{
+				name: 'Afeitado clásico',
+				description: 'Afeitado con toalla caliente y acabado profesional.',
+				durationMinutes: 30,
+				price: 25000,
+				category: ServiceCategory.TREATMENT,
+			},
+			{
+				name: 'Corte + barba',
+				description: 'Paquete completo de corte y arreglo de barba.',
+				durationMinutes: 60,
+				price: 50000,
+				category: ServiceCategory.STYLE,
+			},
+		];
+	}
+
+	if (businessCategory === BusinessCategory.HAIR_SALON) {
+		return [
+			{
+				name: 'Corte dama',
+				description: 'Corte personalizado para dama con asesoría de estilo.',
+				durationMinutes: 50,
+				price: 60000,
+				category: ServiceCategory.CUT,
+			},
+			{
+				name: 'Coloración completa',
+				description: 'Coloración completa con productos profesionales.',
+				durationMinutes: 120,
+				price: 180000,
+				category: ServiceCategory.COLOR,
+			},
+			{
+				name: 'Peinado para evento',
+				description: 'Peinado para bodas, grados y eventos especiales.',
+				durationMinutes: 60,
+				price: 90000,
+				category: ServiceCategory.STYLE,
+			},
+			{
+				name: 'Tratamiento hidratante',
+				description: 'Tratamiento profundo para brillo e hidratación.',
+				durationMinutes: 45,
+				price: 80000,
+				category: ServiceCategory.TREATMENT,
+			},
+		];
+	}
+
+	// NAIL_SPA
+	return [
+		{
+			name: 'Manicure spa',
+			description: 'Manicure con exfoliación e hidratación.',
+			durationMinutes: 45,
+			price: 40000,
+			category: ServiceCategory.TREATMENT,
+		},
+		{
+			name: 'Pedicure spa',
+			description: 'Pedicure completo con masaje relajante.',
+			durationMinutes: 60,
+			price: 50000,
+			category: ServiceCategory.TREATMENT,
+		},
+		{
+			name: 'Uñas acrílicas',
+			description: 'Aplicación de uñas acrílicas personalizadas.',
+			durationMinutes: 90,
+			price: 90000,
+			category: ServiceCategory.STYLE,
+		},
+		{
+			name: 'Retoque gel',
+			description: 'Mantenimiento y retoque de uñas en gel.',
+			durationMinutes: 60,
+			price: 60000,
+			category: ServiceCategory.TREATMENT,
+		},
+	];
+}
+
+function getPortfolioImagesForCategory(businessCategory) {
+	if (businessCategory === BusinessCategory.BARBERSHOP) {
+		return [
+			'https://images.pexels.com/photos/1813272/pexels-photo-1813272.jpeg?auto=compress&cs=tinysrgb&w=800',
+			'https://images.pexels.com/photos/3993449/pexels-photo-3993449.jpeg?auto=compress&cs=tinysrgb&w=800',
+			'https://images.pexels.com/photos/3992873/pexels-photo-3992873.jpeg?auto=compress&cs=tinysrgb&w=800',
+		];
+	}
+
+	if (businessCategory === BusinessCategory.HAIR_SALON) {
+		return [
+			'https://images.pexels.com/photos/3738349/pexels-photo-3738349.jpeg?auto=compress&cs=tinysrgb&w=800',
+			'https://images.pexels.com/photos/3738346/pexels-photo-3738346.jpeg?auto=compress&cs=tinysrgb&w=800',
+			'https://images.pexels.com/photos/3738345/pexels-photo-3738345.jpeg?auto=compress&cs=tinysrgb&w=800',
+		];
+	}
+
+	// NAIL_SPA
+	return [
+		'https://images.pexels.com/photos/3738348/pexels-photo-3738348.jpeg?auto=compress&cs=tinysrgb&w=800',
+		'https://images.pexels.com/photos/3738355/pexels-photo-3738355.jpeg?auto=compress&cs=tinysrgb&w=800',
+		'https://images.pexels.com/photos/3738373/pexels-photo-3738373.jpeg?auto=compress&cs=tinysrgb&w=800',
+	];
+}
+
+async function seedSuperAdmin() {
+	console.log('\n[1] Creando / asegurando Super Admin...');
+	const appUser = await ensureAppUser({
+		email: SUPER_ADMIN_EMAIL,
+		password: SUPER_ADMIN_PASSWORD,
+		role: UserRole.SUPER_ADMIN,
+		status: AccountStatus.ACTIVE,
+		fullName: 'Super Admin',
+	});
+	console.log(`✓ Super Admin listo: ${appUser.email}`);
+	return appUser;
+}
+
+async function seedStylist(stylist, superAdminUser) {
+	console.log(`\n[2] Creando / asegurando estilista: ${stylist.label}...`);
+
+	const appUser = await ensureAppUser({
+		email: stylist.email,
+		password: stylist.password,
+		role: UserRole.STYLIST,
+		status: stylist.status,
+		fullName: stylist.ownerName,
 	});
 
 	// Crear / actualizar StylistProfile
-	await prisma.stylistProfile.upsert({
-		where: { userId },
-		create: {
-			userId,
-			name: 'Estilista Demo',
-			bio: 'Especialista en uñas, color y cuidado capilar. Este es un perfil de prueba para la demo.',
-			phone: '+57 300 123 4567',
-			email,
-			instagram: '@demo.nails',
-			address: 'Calle 123 #45-67, Bogotá',
-			photoUrl:
-				'https://images.pexels.com/photos/3738349/pexels-photo-3738349.jpeg?auto=compress&cs=tinysrgb&w=800',
-		},
-		update: {},
-	});
-	console.log('✓ Perfil creado');
+	const profileData = {
+		businessName: stylist.businessName,
+		ownerName: stylist.ownerName,
+		category: stylist.category,
+		slug: stylist.slug,
+		name: stylist.businessName,
+		bio: `Perfil de ejemplo para ${stylist.businessName}.`,
+		phone: '+57 300 000 0000',
+		whatsapp: '+57 300 000 0000',
+		email: stylist.email,
+		emailVerified: stylist.status !== AccountStatus.PENDING_VERIFICATION,
+		whatsappVerified: stylist.status === AccountStatus.ACTIVE,
+		emailVerifiedAt: stylist.status !== AccountStatus.PENDING_VERIFICATION ? new Date() : null,
+		whatsappVerifiedAt: stylist.status === AccountStatus.ACTIVE ? new Date() : null,
+		approvedBy: stylist.status === AccountStatus.ACTIVE ? superAdminUser.id : null,
+		approvedAt: stylist.status === AccountStatus.ACTIVE ? new Date() : null,
+		primaryColor: stylist.primaryColor,
+		city: 'Bogotá',
+		country: 'Colombia',
+		instagram: '@' + stylist.slug.replace('-', '.'),
+		address: 'Calle 123 #45-67',
+		photoUrl:
+			'https://images.pexels.com/photos/3738349/pexels-photo-3738349.jpeg?auto=compress&cs=tinysrgb&w=800',
+	};
 
-	// Crear / actualizar BusinessHours con horario estándar
-	await prisma.businessHours.upsert({
-		where: { userId },
+	await prisma.stylistProfile.upsert({
+		where: { userId: appUser.id },
+		update: profileData,
 		create: {
-			userId,
-			monday: true,
-			tuesday: true,
-			wednesday: true,
-			thursday: true,
-			friday: true,
-			saturday: true,
-			sunday: false,
-			startTime: '09:00',
-			endTime: '18:00',
-			slotDuration: 30,
+			userId: appUser.id,
+			...profileData,
 		},
+	});
+
+	console.log('  ✓ Perfil de estilista configurado');
+
+	// Solo sembramos servicios, horarios y portafolio para estilistas activos
+	if (stylist.status !== AccountStatus.ACTIVE) {
+		console.log('  (Estado no es ACTIVE, se omiten servicios/horarios/portafolio)');
+		return { appUser, createdServices: [], supabaseUserId: appUser.supabaseAuthId };
+	}
+
+	const supabaseUserId = appUser.supabaseAuthId;
+
+	// BusinessHours estándar
+	await prisma.businessHours.upsert({
+		where: { supabaseUserId },
 		update: {
 			monday: true,
 			tuesday: true,
 			wednesday: true,
 			thursday: true,
 			friday: true,
-			saturday: true,
+			saturday: stylist.category === BusinessCategory.BARBERSHOP || stylist.category === BusinessCategory.NAIL_SPA,
+			sunday: false,
+			startTime: '09:00',
+			endTime: '18:00',
+			slotDuration: 30,
+		},
+		create: {
+			supabaseUserId,
+			monday: true,
+			tuesday: true,
+			wednesday: true,
+			thursday: true,
+			friday: true,
+			saturday: stylist.category === BusinessCategory.BARBERSHOP || stylist.category === BusinessCategory.NAIL_SPA,
 			sunday: false,
 			startTime: '09:00',
 			endTime: '18:00',
 			slotDuration: 30,
 		},
 	});
-	console.log('✓ Horarios configurados');
+	console.log('  ✓ Horarios configurados');
 
-	// 2. Servicios de ejemplo
-	console.log('\n[2] Creando servicios de ejemplo...');
-
-	const servicesData = [
-		{
-			name: 'Corte de cabello',
-			description: 'Corte personalizado según tu estilo y tipo de rostro.',
-			durationMinutes: 45,
-			price: 40000,
-			category: 'CUT',
-		},
-		{
-			name: 'Coloración',
-			description: 'Coloración completa o balayage con productos profesionales.',
-			durationMinutes: 120,
-			price: 120000,
-			category: 'COLOR',
-		},
-		{
-			name: 'Peinado',
-			description: 'Peinados para eventos especiales, ondas, recogidos y más.',
-			durationMinutes: 60,
-			price: 60000,
-			category: 'STYLE',
-		},
-		{
-			name: 'Tratamiento capilar',
-			description: 'Tratamientos hidratantes y reparadores para tu cabello.',
-			durationMinutes: 50,
-			price: 80000,
-			category: 'TREATMENT',
-		},
-	];
-
-	// El campo "active" no existe en el modelo Service del schema actual;
-	// asumimos que todos los servicios creados están disponibles.
-
-	// Elimina servicios previos de este usuario para evitar duplicados en la demo
-	await prisma.service.deleteMany({ where: { userId } });
-
+	// Servicios de ejemplo según categoría
+	await prisma.service.deleteMany({ where: { supabaseUserId } });
+	const servicesData = getServicesForCategory(stylist.category);
 	const createdServices = [];
 	for (const svc of servicesData) {
 		const created = await prisma.service.create({
 			data: {
-				userId,
+				supabaseUserId,
 				name: svc.name,
 				description: svc.description,
 				durationMinutes: svc.durationMinutes,
 				price: svc.price,
 				category: svc.category,
+				active: true,
 			},
 		});
 		createdServices.push(created);
 	}
-	console.log(`✓ ${createdServices.length} servicios creados`);
+	console.log(`  ✓ ${createdServices.length} servicios creados`);
 
-	// 3. Imágenes de portafolio de ejemplo
-	console.log('\n[3] Creando imágenes de portafolio de ejemplo...');
-
-	const portfolioImages = [
-		'https://images.pexels.com/photos/3738346/pexels-photo-3738346.jpeg?auto=compress&cs=tinysrgb&w=800',
-		'https://images.pexels.com/photos/3738345/pexels-photo-3738345.jpeg?auto=compress&cs=tinysrgb&w=800',
-		'https://images.pexels.com/photos/3738355/pexels-photo-3738355.jpeg?auto=compress&cs=tinysrgb&w=800',
-		'https://images.pexels.com/photos/3738348/pexels-photo-3738348.jpeg?auto=compress&cs=tinysrgb&w=800',
-		'https://images.pexels.com/photos/3997379/pexels-photo-3997379.jpeg?auto=compress&cs=tinysrgb&w=800',
-		'https://images.pexels.com/photos/3738373/pexels-photo-3738373.jpeg?auto=compress&cs=tinysrgb&w=800',
-	];
-
-	// Limpiar portafolio previo del usuario de prueba
-	await prisma.portfolioImage.deleteMany({ where: { userId } });
-
+	// Portafolio de ejemplo
+	await prisma.portfolioImage.deleteMany({ where: { supabaseUserId } });
+	const portfolioImages = getPortfolioImagesForCategory(stylist.category);
 	for (let i = 0; i < portfolioImages.length; i += 1) {
 		const imageUrl = portfolioImages[i];
 		await prisma.portfolioImage.create({
 			data: {
-				userId,
+				supabaseUserId,
 				imageUrl,
-				description: `Trabajo de ejemplo #${i + 1}`,
+				description: `Trabajo de ejemplo #${i + 1} - ${stylist.businessName}`,
 				serviceId: createdServices[i % createdServices.length].id,
 			},
 		});
 	}
-	console.log(`✓ ${portfolioImages.length} imágenes de portafolio creadas`);
+	console.log(`  ✓ ${portfolioImages.length} imágenes de portafolio creadas`);
 
-	// 4. Cita de ejemplo en estado PENDING
-	console.log('\n[4] Creando cita de ejemplo...');
+	return { appUser, createdServices, supabaseUserId };
+}
 
-	// Limpiar citas y clientes previos de este usuario de prueba
-	await prisma.appointment.deleteMany({ where: { userId } });
-	await prisma.client.deleteMany({ where: { userId } });
+async function main() {
+	console.log('Iniciando seed multi-tenant...');
 
-	const client = await prisma.client.create({
-		data: {
-			userId,
-			name: 'Cliente Demo',
-			phone: '+57 301 987 6543',
-			email: 'cliente.demo@example.com',
-			notes: 'Cliente de prueba generado por el script seed.',
-		},
+	// 1. Super Admin
+	const superAdminUser = await seedSuperAdmin();
+
+	// 2. Estilistas de ejemplo
+	const seededStylists = [];
+	for (const stylist of STYLISTS) {
+		// eslint-disable-next-line no-await-in-loop
+		const result = await seedStylist(stylist, superAdminUser);
+		seededStylists.push({ stylist, result });
+	}
+
+	// 3. Resumen final
+	console.log('\n=========================================');
+	console.log('Seed multi-tenant completado correctamente');
+	console.log('=========================================\n');
+
+	console.log('Super Admin:');
+	console.log(`- Email: ${SUPER_ADMIN_EMAIL}`);
+	console.log(`- Password: ${SUPER_ADMIN_PASSWORD}`);
+	console.log(`- URL panel Super Admin: ${FRONTEND_URL}/super-admin/login`);
+
+	console.log('\nEstilistas de ejemplo:');
+	seededStylists.forEach(({ stylist }) => {
+		console.log(`\n[${stylist.label}]`);
+		console.log(`- Email: ${stylist.email}`);
+		console.log(`- Password: ${stylist.password}`);
+		console.log(`- Estado: ${stylist.status}`);
+		console.log(`- Categoría: ${stylist.category}`);
+		console.log(`- Landing pública: ${FRONTEND_URL}/${stylist.slug}`);
 	});
-
-	const today = new Date();
-	const dateOnly = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-	const time = new Date();
-	time.setHours(15, 0, 0, 0); // 15:00
-
-	const firstService = createdServices[0];
-	await prisma.appointment.create({
-		data: {
-			userId,
-			clientId: client.id,
-			serviceId: firstService.id,
-			date: dateOnly,
-			time,
-			duration: firstService.durationMinutes,
-			status: 'PENDING',
-			notes: 'Cita de prueba generada automáticamente.',
-		},
-	});
-	console.log('✓ 1 cita de prueba creada');
-
-	console.log('\nSeed completado exitosamente.');
 }
 
 main()

@@ -13,51 +13,61 @@ const handleValidation = (req, res, next) => {
 	return next();
 };
 
-// 1. GET /api/public/stylist/:userId/info
+// 1. GET /api/public/stylist/:slug/info
 router.get(
-	'/stylist/:userId/info',
+	'/stylist/:slug/info',
 	[
-		param('userId').isString().notEmpty().withMessage('userId es obligatorio'),
+		param('slug').isString().notEmpty().withMessage('slug es obligatorio'),
 		handleValidation,
 	],
 	publicController.getStylistInfo,
 );
 
-// 1b. GET /api/public/stylist/:userId/profile
+// 1b. GET /api/public/stylist/:slug/profile
 router.get(
-	'/stylist/:userId/profile',
+	'/stylist/:slug/profile',
 	[
-		param('userId').isString().notEmpty().withMessage('userId es obligatorio'),
+		param('slug').isString().notEmpty().withMessage('slug es obligatorio'),
 		handleValidation,
 	],
 	publicController.getStylistProfile,
 );
 
-// 2. GET /api/public/stylist/:userId/services
+// Ruta para obtener perfil completo por slug
 router.get(
-	'/stylist/:userId/services',
+	'/stylist/:slug',
 	[
-		param('userId').isString().notEmpty().withMessage('userId es obligatorio'),
+		param('slug').isString().notEmpty().withMessage('slug es obligatorio'),
+		handleValidation,
+	],
+	publicController.getStylistBySlug,
+);
+
+// 2. GET /api/public/stylist/:slug/services
+router.get(
+	'/stylist/:slug/services',
+	[
+		param('slug').isString().notEmpty().withMessage('slug es obligatorio'),
 		handleValidation,
 	],
 	publicController.getPublicServices,
 );
 
-// 3. GET /api/public/stylist/:userId/portfolio
+// 3. GET /api/public/stylist/:slug/portfolio
 router.get(
-	'/stylist/:userId/portfolio',
+	'/stylist/:slug/portfolio',
 	[
-		param('userId').isString().notEmpty().withMessage('userId es obligatorio'),
+		param('slug').isString().notEmpty().withMessage('slug es obligatorio'),
 		handleValidation,
 	],
 	publicController.getPublicPortfolio,
 );
 
-// 4. GET /api/public/stylist/:userId/available-slots
+// 4. GET /api/public/stylist/:slug/available-slots
 router.get(
-	'/stylist/:userId/available-slots',
+	'/stylist/:slug/available-slots',
 	[
-		param('userId').isString().notEmpty().withMessage('userId es obligatorio'),
+		param('slug').isString().notEmpty().withMessage('slug es obligatorio'),
 		query('date')
 			.isISO8601()
 			.withMessage('La fecha es obligatoria y debe tener formato válido'),
@@ -71,11 +81,11 @@ router.get(
 	publicController.getAvailableSlots,
 );
 
-// 5. POST /api/public/stylist/:userId/appointments
+// 5. POST /api/public/stylist/:slug/appointments
 router.post(
-	'/stylist/:userId/appointments',
+	'/stylist/:slug/appointments',
 	[
-		param('userId').isString().notEmpty().withMessage('userId es obligatorio'),
+		param('slug').isString().notEmpty().withMessage('slug es obligatorio'),
 		body('clientName')
 			.isString()
 			.trim()

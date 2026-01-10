@@ -1,804 +1,432 @@
-import { useEffect, useMemo, useState } from 'react';
-import { toast } from 'react-hot-toast';
 import {
-  Clock,
-  Phone,
-  Mail,
-  MapPin,
-  Instagram,
-  Facebook,
-  CheckCircle2,
   Calendar,
+  Users,
+  Clock,
+  CheckCircle2,
   ArrowRight,
-  Loader2,
+  Smartphone,
+  Sparkles,
 } from 'lucide-react';
-import api from '../../services/api';
 
-function formatPriceCOP(value) {
-  if (typeof value !== 'number') return '';
-  return new Intl.NumberFormat('es-CO', {
-    style: 'currency',
-    currency: 'COP',
-    maximumFractionDigits: 0,
-  }).format(value);
+function Section({ id, children, className = '' }) {
+  return (
+    <section
+      id={id}
+      className={`max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-16 sm:py-20 ${className}`}
+    >
+      {children}
+    </section>
+  );
 }
 
-function classNames(...classes) {
-  return classes.filter(Boolean).join(' ');
-}
-
-const stylistIdEnv = import.meta.env.VITE_STYLIST_ID;
-
-function LandingPage() {
-  const userId = stylistIdEnv;
-
-  const [stylist, setStylist] = useState(null);
-  const [loadingStylist, setLoadingStylist] = useState(false);
-  const [stylistError, setStylistError] = useState(null);
-
-  const [services, setServices] = useState([]);
-  const [loadingServices, setLoadingServices] = useState(false);
-
-  const [portfolio, setPortfolio] = useState([]);
-  const [loadingPortfolio, setLoadingPortfolio] = useState(false);
-
-  const [reservationOpen, setReservationOpen] = useState(false);
-  const [selectedServiceId, setSelectedServiceId] = useState(null);
-  const [selectedDate, setSelectedDate] = useState('');
-  const [slots, setSlots] = useState([]);
-  const [loadingSlots, setLoadingSlots] = useState(false);
-  const [selectedTime, setSelectedTime] = useState('');
-
-  const [clientName, setClientName] = useState('');
-  const [clientPhone, setClientPhone] = useState('');
-  const [clientEmail, setClientEmail] = useState('');
-  const [clientNotes, setClientNotes] = useState('');
-
-  const [submitting, setSubmitting] = useState(false);
-  const [confirmation, setConfirmation] = useState(null);
-
-  const [lightboxImage, setLightboxImage] = useState(null);
-
-  const todayStr = useMemo(() => {
-    const d = new Date();
-    const year = d.getFullYear();
-    const month = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
-  }, []);
-
-  useEffect(() => {
-    if (!userId) return;
-
-    const fetchStylist = async () => {
-      setStylistError(null);
-      try {
-        setLoadingStylist(true);
-        const res = await api.get(`/api/public/stylist/${userId}/profile`);
-        const data = res.data || null;
-        if (!data || (!data.name && !data.bio && !data.phone && !data.email && !data.instagram && !data.address && !data.photoUrl)) {
-          setStylist(null);
-          setStylistError('Este estilista aún no ha configurado su perfil');
-        } else {
-          setStylist(data);
-        }
-      } catch (error) {
-        console.error('Error fetching stylist profile', error);
-        setStylist(null);
-        setStylistError('No se pudo cargar la información del estilista');
-        toast.error('No se pudo cargar la información del estilista');
-      } finally {
-        setLoadingStylist(false);
-      }
-    };
-
-    fetchStylist();
-  }, [userId]);
-
-  useEffect(() => {
-    if (!userId) return;
-
-    const fetchServices = async () => {
-      try {
-        setLoadingServices(true);
-        const res = await api.get(`/api/public/stylist/${userId}/services`);
-        setServices(res.data || []);
-      } catch (error) {
-        console.error('Error fetching services', error);
-        toast.error('No se pudieron cargar los servicios');
-      } finally {
-        setLoadingServices(false);
-      }
-    };
-
-    const fetchPortfolio = async () => {
-      try {
-        setLoadingPortfolio(true);
-        const res = await api.get(`/api/public/stylist/${userId}/portfolio`);
-        setPortfolio(res.data || []);
-      } catch (error) {
-        console.error('Error fetching portfolio', error);
-        toast.error('No se pudo cargar el portafolio');
-      } finally {
-        setLoadingPortfolio(false);
-      }
-    };
-
-    fetchServices();
-    fetchPortfolio();
-  }, [userId]);
-
-  useEffect(() => {
-    if (!userId || !selectedServiceId || !selectedDate) {
-      setSlots([]);
-      setSelectedTime('');
-      return;
-    }
-
-    const fetchSlots = async () => {
-      try {
-        setLoadingSlots(true);
-        const res = await api.get(`/api/public/stylist/${userId}/available-slots`, {
-          params: { date: selectedDate, serviceId: selectedServiceId },
-        });
-        setSlots(res.data?.slots || []);
-      } catch (error) {
-        console.error('Error fetching available slots', error);
-        toast.error('No se pudieron cargar los horarios disponibles');
-        setSlots([]);
-      } finally {
-        setLoadingSlots(false);
-      }
-    };
-
-    fetchSlots();
-  }, [userId, selectedServiceId, selectedDate]);
-
-  const handleOpenReservation = (serviceId) => {
-    setConfirmation(null);
-    setSelectedServiceId(serviceId || null);
-    setSelectedDate('');
-    setSelectedTime('');
-    setSlots([]);
-    setClientName('');
-    setClientPhone('');
-    setClientEmail('');
-    setClientNotes('');
-    setReservationOpen(true);
-  };
-
-  const handleSubmitReservation = async (e) => {
-    e.preventDefault();
-    if (!userId) {
-      toast.error('No se encontró el estilista');
-      return;
-    }
-
-    if (!selectedServiceId || !selectedDate || !selectedTime) {
-      toast.error('Selecciona servicio, fecha y hora');
-      return;
-    }
-
-    if (!clientName.trim() || !clientPhone.trim()) {
-      toast.error('Nombre y teléfono son obligatorios');
-      return;
-    }
-
-    try {
-      setSubmitting(true);
-      const payload = {
-        clientName: clientName.trim(),
-        clientPhone: clientPhone.trim(),
-        clientEmail: clientEmail.trim() || undefined,
-        serviceId: selectedServiceId,
-        date: selectedDate,
-        time: selectedTime,
-        notes: clientNotes.trim() || undefined,
-      };
-
-      const res = await api.post(`/api/public/stylist/${userId}/appointments`, payload);
-
-      const service = services.find((s) => s.id === Number(selectedServiceId));
-      setConfirmation({
-        appointmentId: res.data?.appointmentId,
-        serviceName: service?.name || '',
-        date: selectedDate,
-        time: selectedTime,
-      });
-      toast.success('Cita agendada correctamente');
-    } catch (error) {
-      console.error('Error creating public appointment', error);
-      const message = error?.response?.data?.message || 'No se pudo agendar la cita';
-      toast.error(message);
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const handleCloseModal = () => {
-    setReservationOpen(false);
-    setConfirmation(null);
-  };
-
-  const stylistName = stylist?.name || 'Tu estilista de confianza';
-  const stylistBio =
-    stylist?.bio || 'Especialista en uñas y belleza, cuidando cada detalle de tu estilo.';
-
-  if (!userId) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-pink-50 to-purple-50">
-        <p className="text-gray-600 text-center px-4">
-          No se encontró el estilista. Revisa la configuración de VITE_STYLIST_ID.
+function SectionTitle({ eyebrow, title, subtitle }) {
+  return (
+    <div className="text-center max-w-3xl mx-auto mb-10 sm:mb-14">
+      {eyebrow && (
+        <p className="text-xs font-semibold tracking-[0.2em] uppercase text-pink-500 mb-3">
+          {eyebrow}
         </p>
+      )}
+      <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold text-gray-900 mb-4">
+        {title}
+      </h2>
+      {subtitle && <p className="text-sm sm:text-base text-gray-600">{subtitle}</p>}
+    </div>
+  );
+}
+
+function PrimaryButton({ href, children }) {
+  return (
+    <a
+      href={href}
+      className="inline-flex items-center justify-center px-5 py-3 rounded-full text-sm font-semibold text-white bg-pink-500 hover:bg-pink-600 shadow-lg shadow-pink-500/30 transition-colors"
+    >
+      {children}
+    </a>
+  );
+}
+
+function SecondaryButton({ href, children }) {
+  return (
+    <a
+      href={href}
+      className="inline-flex items-center justify-center px-5 py-3 rounded-full text-sm font-semibold text-pink-600 bg-pink-50 hover:bg-pink-100 border border-pink-100 transition-colors"
+    >
+      {children}
+    </a>
+  );
+}
+
+function BenefitCard({ icon: Icon, title, description }) {
+  return (
+    <div className="bg-white/70 backdrop-blur rounded-2xl p-5 sm:p-6 shadow-sm border border-pink-50 flex gap-4">
+      <div className="shrink-0 w-10 h-10 rounded-full bg-pink-50 flex items-center justify-center text-pink-500">
+        <Icon className="w-5 h-5" />
       </div>
-    );
-  }
+      <div>
+        <h3 className="font-semibold text-gray-900 mb-1 text-sm sm:text-base">{title}</h3>
+        <p className="text-xs sm:text-sm text-gray-600">{description}</p>
+      </div>
+    </div>
+  );
+}
+
+function FeatureCard({ title, points }) {
+  return (
+    <div className="bg-white/70 backdrop-blur rounded-2xl p-6 shadow-sm border border-gray-100 h-full">
+      <h3 className="font-semibold text-gray-900 mb-3 text-sm sm:text-base">{title}</h3>
+      <ul className="space-y-2.5 text-xs sm:text-sm text-gray-600">
+        {points.map((point) => (
+          <li key={point} className="flex items-start gap-2">
+            <CheckCircle2 className="w-4 h-4 mt-0.5 text-pink-500 shrink-0" />
+            <span>{point}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function Step({ number, title, description }) {
+  return (
+    <div className="flex items-start gap-4">
+      <div className="flex items-center justify-center w-9 h-9 rounded-full bg-pink-50 text-pink-500 font-semibold text-sm">
+        {number}
+      </div>
+      <div>
+        <h3 className="font-semibold text-gray-900 mb-1 text-sm sm:text-base">{title}</h3>
+        <p className="text-xs sm:text-sm text-gray-600">{description}</p>
+      </div>
+    </div>
+  );
+}
+
+export default function LandingPage() {
+  const benefits = [
+    {
+      icon: Calendar,
+      title: 'Llena tu agenda sin caos',
+      description:
+        'Tus clientes reservan online 24/7 y tú controlas horarios, servicios y disponibilidad desde un solo lugar.',
+    },
+    {
+      icon: Users,
+      title: 'Haz que vuelvan siempre',
+      description:
+        'Construye una base de clientes organizada, con historial de citas y datos listos para tus campañas.',
+    },
+    {
+      icon: Clock,
+      title: 'Menos ausencias, más ingresos',
+      description:
+        'Configura recordatorios automáticos y reduce las citas perdidas por olvidos o malentendidos de horario.',
+    },
+  ];
+
+  const features = [
+    {
+      title: 'Gestión de citas y horarios',
+      points: [
+        'Agenda visual pensada para estilistas y salones de belleza.',
+        'Configuración de horarios, días bloqueados y duración de servicios.',
+        'Visualización clara de tu día, semana y próximos turnos.',
+      ],
+    },
+    {
+      title: 'Clientes y servicios en orden',
+      points: [
+        'Ficha de cliente con datos de contacto y notas importantes.',
+        'Catálogo de servicios con precios, duración y categorías.',
+        'Historial de visitas para saber qué funcionó mejor en cada persona.',
+      ],
+    },
+    {
+      title: 'Landing pública lista para compartir',
+      points: [
+        'Página pública personalizada para tu salón o marca personal.',
+        'Tus clientes eligen servicio, fecha y hora desde el celular.',
+        'Ideal para compartir en Instagram, WhatsApp y Google Business.',
+      ],
+    },
+  ];
+
+  const steps = [
+    {
+      title: 'Crea tu cuenta en minutos',
+      description:
+        'Regístrate, confirma tu correo y completa los datos básicos de tu salón o marca personal.',
+    },
+    {
+      title: 'Configura servicios y horarios',
+      description:
+        'Define qué ofreces, precios, duración y los horarios en los que quieres recibir reservas.',
+    },
+    {
+      title: 'Comparte tu enlace y recibe reservas',
+      description:
+        'Comparte tu landing con tus clientes y deja que ellos mismos reserven el horario que mejor les quede.',
+    },
+  ];
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-pink-50 via-white to-purple-50 text-gray-900">
-      {/* Header / Navbar */}
-      <header className="sticky top-0 z-30 bg-white/80 backdrop-blur border-b border-pink-100">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between h-16">
+      {/* Navbar */}
+      <header className="sticky top-0 z-30 bg-white/80 backdrop-blur border-b border-pink-100/60">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-pink-500 to-purple-500 flex items-center justify-center shadow-md">
               <span className="text-white font-semibold text-lg">NS</span>
             </div>
             <div className="flex flex-col">
               <span className="font-semibold text-sm sm:text-base text-gray-900">
-                {stylistName}
+                Nails Schedule
               </span>
-              <span className="text-xs text-pink-500">Nails & Beauty</span>
+              <span className="text-[11px] text-pink-500">Agenda para belleza y estilismo</span>
             </div>
           </div>
 
-          <nav className="hidden md:flex items-center gap-6 text-sm font-medium">
-            <a href="#services" className="hover:text-pink-500 transition-colors">
-              Servicios
+          <nav className="hidden md:flex items-center gap-6 text-xs sm:text-sm font-medium text-gray-600">
+            <a href="#beneficios" className="hover:text-pink-500 transition-colors">
+              Beneficios
             </a>
-            <a href="#portfolio" className="hover:text-pink-500 transition-colors">
-              Portafolio
+            <a href="#caracteristicas" className="hover:text-pink-500 transition-colors">
+              Características
             </a>
-            <a href="#contact" className="hover:text-pink-500 transition-colors">
-              Contacto
+            <a href="#como-funciona" className="hover:text-pink-500 transition-colors">
+              Cómo funciona
             </a>
-            <button
-              type="button"
-              onClick={() => handleOpenReservation(null)}
-              className="inline-flex items-center gap-1 rounded-full bg-gradient-to-r from-pink-500 to-purple-500 px-4 py-2 text-sm font-semibold text-white shadow-md hover:shadow-lg transition-all"
-            >
-              Agendar
-              <ArrowRight className="w-4 h-4" />
-            </button>
           </nav>
+
+          <div className="flex items-center gap-2">
+            <a
+              href="/admin/login"
+              className="hidden sm:inline-flex text-xs sm:text-sm font-semibold text-gray-700 hover:text-pink-500"
+            >
+              Iniciar sesión
+            </a>
+            <PrimaryButton href="/admin/register">
+              <span className="mr-1.5">Probar gratis</span>
+              <ArrowRight className="w-4 h-4" />
+            </PrimaryButton>
+          </div>
         </div>
       </header>
 
-      <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pb-16">
-        {/* Hero Section */}
-        <section className="py-10 sm:py-14 grid md:grid-cols-2 gap-10 items-center">
-          <div className="order-2 md:order-1 space-y-6">
-            <div className="inline-flex items-center gap-2 rounded-full bg-pink-50 px-3 py-1 text-xs font-medium text-pink-600 border border-pink-100">
-              <span className="w-1.5 h-1.5 rounded-full bg-pink-500" />
-              Agenda tu cita en línea
-            </div>
-            <h1 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight text-gray-900">
-              Uñas perfectas,
-              <span className="block text-transparent bg-clip-text bg-gradient-to-r from-pink-500 to-purple-500">
-                estilo impecable
-              </span>
-            </h1>
-            <p className="text-sm sm:text-base text-gray-600 max-w-xl">
-              {stylistError
-                ? stylistError
-                : stylistBio}
+      {/* Hero */}
+      <Section className="pt-10 sm:pt-16">
+        <div className="grid gap-10 lg:grid-cols-2 lg:items-center">
+          <div>
+            <p className="inline-flex items-center gap-1.5 rounded-full bg-pink-50 px-3 py-1 text-[11px] font-medium text-pink-600 mb-4">
+              <Sparkles className="w-3.5 h-3.5" />
+              Agenda online pensada para belleza
             </p>
-            <div className="flex flex-wrap items-center gap-4">
-              <button
-                type="button"
-                onClick={() => handleOpenReservation(null)}
-                className="inline-flex items-center justify-center gap-2 rounded-full bg-gradient-to-r from-pink-500 to-purple-500 px-6 py-3 text-sm sm:text-base font-semibold text-white shadow-lg hover:shadow-xl transition-all"
-              >
-                <Calendar className="w-4 h-4" />
-                Agendar Cita
-              </button>
-              <div className="flex flex-col text-xs sm:text-sm text-gray-500">
-                <span>Atención personalizada, horarios flexibles</span>
-                <span>Reserva en menos de 1 minuto</span>
+            <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold tracking-tight text-gray-900 mb-4">
+              Deja el cuaderno atrás.
+              <br />
+              <span className="text-pink-500">Llena tu agenda desde tu celular.</span>
+            </h1>
+            <p className="text-sm sm:text-base text-gray-600 mb-6 max-w-xl">
+              Nails Schedule es un software de agendamiento creado para estilistas, manicuristas y salones
+              de belleza que quieren organizar su agenda, reducir ausencias y dar una mejor experiencia a sus
+              clientes.
+            </p>
+
+            <div className="flex flex-wrap items-center gap-3 mb-5">
+              <PrimaryButton href="/admin/register">
+                <span className="mr-1.5">Crear cuenta gratis</span>
+                <ArrowRight className="w-4 h-4" />
+              </PrimaryButton>
+              <SecondaryButton href="#demo">Ver demo en 2 minutos</SecondaryButton>
+            </div>
+
+            <p className="text-[11px] sm:text-xs text-gray-500 mb-4">
+              Sin tarjeta de crédito · Pensado para profesionales independientes y salones pequeños
+            </p>
+
+            <div className="flex flex-wrap items-center gap-4 text-[11px] sm:text-xs text-gray-600">
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-pink-500" />
+                <span>Ideal para uñas, cabello, cejas y pestañas</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-pink-500" />
+                <span>Configura tu agenda en menos de 15 minutos</span>
               </div>
             </div>
           </div>
 
-          <div className="order-1 md:order-2 flex justify-center">
-            <div className="relative w-64 h-64 sm:w-72 sm:h-72 md:w-80 md:h-80">
-              <div className="absolute inset-0 rounded-3xl bg-gradient-to-tr from-pink-400 via-purple-400 to-pink-600 shadow-2xl" />
-              <div className="absolute -inset-3 rounded-[2.2rem] bg-gradient-to-tr from-white/40 to-white/10 backdrop-blur-sm" />
-              <div className="relative w-full h-full rounded-3xl overflow-hidden border border-white/40 shadow-xl bg-[url('https://images.pexels.com/photos/3997379/pexels-photo-3997379.jpeg?auto=compress&cs=tinysrgb&w=800')] bg-cover bg-center" />
-            </div>
-          </div>
-        </section>
-
-        {/* Servicios */}
-        <section id="services" className="py-8 sm:py-10">
-          <div className="flex items-center justify-between mb-6">
-            <div>
-              <h2 className="text-xl sm:text-2xl font-bold text-gray-900">Servicios</h2>
-              <p className="text-xs sm:text-sm text-gray-500">
-                Elige tu servicio favorito y agenda al instante.
-              </p>
-            </div>
-          </div>
-
-          {loadingServices ? (
-            <div className="flex items-center justify-center py-10">
-              <Loader2 className="w-6 h-6 animate-spin text-pink-500" />
-            </div>
-          ) : services.length === 0 ? (
-            <p className="text-gray-500 text-sm">Aún no hay servicios disponibles.</p>
-          ) : (
-            <div className="grid gap-5 sm:gap-6 sm:grid-cols-2 lg:grid-cols-3">
-              {services.map((service) => (
-                <article
-                  key={service.id}
-                  className="group rounded-2xl bg-white/90 border border-pink-50 shadow-sm hover:shadow-lg transition-all overflow-hidden flex flex-col"
-                >
-                  <div className="h-32 bg-gradient-to-br from-pink-100 to-purple-100 relative overflow-hidden">
-                    <div className="absolute inset-0 bg-[radial-gradient(circle_at_0_0,_rgba(244,114,182,0.4),_transparent_60%),_radial-gradient(circle_at_100%_100%,_rgba(167,139,250,0.4),_transparent_55%)]" />
-                  </div>
-                  <div className="flex-1 p-4 space-y-3">
-                    <h3 className="text-sm sm:text-base font-semibold text-gray-900">
-                      {service.name}
-                    </h3>
-                    {service.description && (
-                      <p className="text-xs sm:text-sm text-gray-600 line-clamp-3">
-                        {service.description}
-                      </p>
-                    )}
-                    <div className="flex items-center justify-between text-xs sm:text-sm mt-2">
-                      <div className="flex items-center gap-1.5 text-gray-500">
-                        <Clock className="w-4 h-4 text-pink-500" />
-                        <span>{service.durationMinutes} min</span>
-                      </div>
-                      <span className="font-semibold text-pink-600">
-                        {formatPriceCOP(service.price)}
-                      </span>
-                    </div>
-                  </div>
-                  <div className="p-4 pt-0">
-                    <button
-                      type="button"
-                      onClick={() => handleOpenReservation(service.id)}
-                      className="w-full inline-flex items-center justify-center gap-2 rounded-full bg-pink-500 px-4 py-2 text-xs sm:text-sm font-semibold text-white shadow-sm hover:bg-pink-600 hover:shadow-md transition-all"
-                    >
-                      Agendar
-                      <ArrowRight className="w-4 h-4" />
-                    </button>
-                  </div>
-                </article>
-              ))}
-            </div>
-          )}
-        </section>
-
-        {/* Portafolio */}
-        <section id="portfolio" className="py-8 sm:py-10">
-          <div className="flex items-center justify-between mb-6">
-            <div>
-              <h2 className="text-xl sm:text-2xl font-bold text-gray-900">Portafolio</h2>
-              <p className="text-xs sm:text-sm text-gray-500">
-                Un vistazo a algunos de nuestros trabajos recientes.
-              </p>
-            </div>
-          </div>
-
-          {loadingPortfolio ? (
-            <div className="flex items-center justify-center py-10">
-              <Loader2 className="w-6 h-6 animate-spin text-pink-500" />
-            </div>
-          ) : portfolio.length === 0 ? (
-            <p className="text-gray-500 text-sm">Aún no hay fotos en el portafolio.</p>
-          ) : (
-            <div className="columns-2 md:columns-3 gap-3 sm:gap-4 space-y-3 sm:space-y-4">
-              {portfolio.map((item) => (
-                <button
-                  type="button"
-                  key={item.id}
-                  onClick={() => setLightboxImage(item)}
-                  className="group relative w-full overflow-hidden rounded-2xl bg-gray-100 shadow-sm hover:shadow-md transition-all"
-                >
-                  <img
-                    src={item.imageUrl}
-                    alt={item.description || item?.service?.name || 'Trabajo de uñas'}
-                    className="w-full h-auto object-cover group-hover:scale-[1.03] transition-transform duration-300"
-                    loading="lazy"
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-                  <div className="absolute bottom-2 left-2 right-2 flex flex-col gap-0.5 text-left">
-                    {item.service?.name && (
-                      <span className="text-[11px] sm:text-xs font-semibold text-white">
-                        {item.service.name}
-                      </span>
-                    )}
-                    {item.description && (
-                      <span className="text-[10px] sm:text-[11px] text-gray-100 line-clamp-2">
-                        {item.description}
-                      </span>
-                    )}
-                  </div>
-                </button>
-              ))}
-            </div>
-          )}
-        </section>
-
-        {/* Contacto */}
-        <section id="contact" className="py-8 sm:py-10">
-          <div className="grid lg:grid-cols-2 gap-8 items-start">
-            <div className="space-y-4">
-              <h2 className="text-xl sm:text-2xl font-bold text-gray-900">Contacto</h2>
-              <p className="text-xs sm:text-sm text-gray-500">
-                ¿Tienes dudas o deseas una asesoría personalizada? Escríbenos o llámanos.
-              </p>
-
-              <div className="space-y-3 text-xs sm:text-sm">
-                {stylist?.phone && (
-                  <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 rounded-full bg-pink-50 flex items-center justify-center text-pink-500">
-                      <Phone className="w-4 h-4" />
-                    </div>
-                    <a
-                      href={`https://wa.me/${stylist.phone.replace(/[^0-9]/g, '')}`}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="text-gray-700 hover:text-pink-500 transition-colors"
-                    >
-                      {stylist.phone}
-                    </a>
-                  </div>
-                )}
-
-                {stylist?.email && (
-                  <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 rounded-full bg-pink-50 flex items-center justify-center text-pink-500">
-                      <Mail className="w-4 h-4" />
-                    </div>
-                    <a
-                      href={`mailto:${stylist.email}`}
-                      className="text-gray-700 hover:text-pink-500 transition-colors break-all"
-                    >
-                      {stylist.email}
-                    </a>
-                  </div>
-                )}
-
-                {stylist?.address && (
-                  <div className="flex items-start gap-2">
-                    <div className="w-8 h-8 rounded-full bg-pink-50 flex items-center justify-center text-pink-500 mt-0.5">
-                      <MapPin className="w-4 h-4" />
-                    </div>
-                    <p className="text-gray-700 text-xs sm:text-sm">{stylist.address}</p>
-                  </div>
-                )}
-              </div>
-
-              <div className="flex items-center gap-4 pt-2">
-                {stylist?.instagram && (
-                  <a
-                    href={`https://instagram.com/${stylist.instagram.replace(/^@/, '')}`}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="w-8 h-8 rounded-full bg-pink-50 flex items-center justify-center text-pink-500 hover:bg-pink-100 transition-colors"
-                  >
-                    <Instagram className="w-4 h-4" />
-                  </a>
-                )}
-              </div>
-            </div>
-
-            <div className="rounded-2xl overflow-hidden border border-pink-100 bg-white/80 shadow-sm min-h-[220px]">
-              {stylist?.address ? (
-                <iframe
-                  title="Mapa de ubicación"
-                  src={
-                    stylist.mapUrl ||
-                    'https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3976.999999!2d-74.08175!3d4.60971!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x0%3A0x0!2zNMKwMzYnMzUiTiA3NMKwMDQnNTQuMyJX!5e0!3m2!1ses!2sco!4v1700000000000'
-                  }
-                  width="100%"
-                  height="260"
-                  style={{ border: 0 }}
-                  loading="lazy"
-                  allowFullScreen
-                  referrerPolicy="no-referrer-when-downgrade"
-                />
-              ) : (
-                <div className="flex items-center justify-center h-full p-6 text-xs sm:text-sm text-gray-500">
-                  La ubicación del salón se mostrará aquí cuando esté disponible.
-                </div>
-              )}
-            </div>
-          </div>
-        </section>
-      </main>
-
-      {/* Modal de Reserva */}
-      {reservationOpen && (
-        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 px-4">
-          <div className="relative w-full max-w-lg rounded-3xl bg-white shadow-2xl max-h-[90vh] overflow-hidden">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-pink-100 bg-gradient-to-r from-pink-50 to-purple-50">
-              <div>
-                <h3 className="text-base sm:text-lg font-semibold text-gray-900">
-                  {confirmation ? 'Cita agendada' : 'Agendar cita'}
-                </h3>
-                {!confirmation && (
-                  <p className="text-xs sm:text-sm text-gray-500">
-                    Completa los pasos para reservar tu espacio.
+          <div className="relative">
+            <div className="absolute -inset-4 -z-10 bg-gradient-to-tr from-pink-200/60 via-white to-purple-200/70 rounded-3xl blur-2xl opacity-60" />
+            <div className="relative rounded-3xl bg-white/80 border border-pink-100 shadow-xl p-5 sm:p-6 flex flex-col gap-4">
+              <div className="flex items-center justify-between mb-2">
+                <div>
+                  <p className="text-xs font-medium text-pink-500 uppercase tracking-wide mb-1">
+                    Vista diaria
                   </p>
-                )}
-              </div>
-              <button
-                type="button"
-                onClick={handleCloseModal}
-                className="text-xs sm:text-sm text-gray-500 hover:text-gray-700"
-              >
-                Cerrar
-              </button>
-            </div>
-
-            {/* Contenido del modal */}
-            <div className="p-6 overflow-y-auto max-h-[70vh]">
-              {confirmation ? (
-                <div className="flex flex-col items-center text-center gap-4">
-                  <div className="w-16 h-16 rounded-full bg-emerald-50 flex items-center justify-center mb-2">
-                    <CheckCircle2 className="w-10 h-10 text-emerald-500" />
-                  </div>
-                  <h4 className="text-lg font-semibold text-gray-900">
-                    ¡Cita agendada exitosamente!
-                  </h4>
-                  <p className="text-xs sm:text-sm text-gray-600 max-w-xs">
-                    Hemos recibido tu solicitud. Te confirmaremos pronto por WhatsApp o por el
-                    medio de contacto que nos dejaste.
-                  </p>
-                  <div className="w-full max-w-xs mt-2 rounded-2xl border border-pink-100 bg-pink-50/60 px-4 py-3 text-left text-xs sm:text-sm text-gray-800 space-y-1">
-                    {confirmation.serviceName && (
-                      <p>
-                        <span className="font-medium">Servicio:</span> {confirmation.serviceName}
-                      </p>
-                    )}
-                    <p>
-                      <span className="font-medium">Fecha:</span> {confirmation.date}
-                    </p>
-                    <p>
-                      <span className="font-medium">Hora:</span> {confirmation.time}
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={handleCloseModal}
-                    className="mt-3 inline-flex items-center justify-center rounded-full bg-pink-500 px-6 py-2 text-xs sm:text-sm font-semibold text-white shadow-sm hover:bg-pink-600 hover:shadow-md transition-all"
-                  >
-                    Cerrar
-                  </button>
+                  <p className="text-sm font-semibold text-gray-900">Agenda de hoy</p>
                 </div>
-              ) : (
-                <form className="space-y-5" onSubmit={handleSubmitReservation}>
-                  {/* Paso 1: Servicio */}
-                  <div className="space-y-2">
-                    <h4 className="text-xs font-semibold uppercase tracking-wide text-pink-500">
-                      Paso 1
-                    </h4>
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-sm font-medium text-gray-900">Selecciona un servicio</span>
-                      <span className="text-[11px] text-gray-400">
-                        {services.length > 0 ? `${services.length} disponibles` : 'Sin servicios' }
-                      </span>
-                    </div>
-                    <div className="mt-1 grid grid-cols-1 sm:grid-cols-2 gap-2">
-                      {services.map((service) => (
-                        <button
-                          key={service.id}
-                          type="button"
-                          onClick={() => setSelectedServiceId(service.id)}
-                          className={classNames(
-                            'border rounded-2xl px-3 py-2 text-left text-xs sm:text-sm transition-all',
-                            selectedServiceId === service.id
-                              ? 'border-pink-500 bg-pink-50 shadow-sm'
-                              : 'border-gray-200 hover:border-pink-300 hover:bg-pink-50/60',
-                          )}
-                        >
-                          <div className="font-medium text-gray-900 line-clamp-1">{service.name}</div>
-                          <div className="mt-0.5 flex justify-between items-center text-[11px] text-gray-500">
-                            <span className="flex items-center gap-1">
-                              <Clock className="w-3 h-3 text-pink-500" />
-                              {service.durationMinutes} min
-                            </span>
-                            <span className="font-semibold text-pink-600">
-                              {formatPriceCOP(service.price)}
-                            </span>
-                          </div>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
+                <div className="flex items-center gap-2 text-[11px] text-gray-500">
+                  <Calendar className="w-4 h-4" />
+                  <span>100% online</span>
+                </div>
+              </div>
 
-                  {/* Paso 2: Fecha */}
-                  <div className="space-y-2">
-                    <h4 className="text-xs font-semibold uppercase tracking-wide text-pink-500">
-                      Paso 2
-                    </h4>
-                    <label className="block text-sm font-medium text-gray-900 mb-1">
-                      Selecciona una fecha
-                    </label>
-                    <input
-                      type="date"
-                      className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm shadow-sm focus:border-pink-500 focus:ring-2 focus:ring-pink-100 outline-none disabled:bg-gray-50 disabled:text-gray-400"
-                      min={todayStr}
-                      value={selectedDate}
-                      onChange={(e) => setSelectedDate(e.target.value)}
-                      disabled={!selectedServiceId}
-                    />
-                    {!selectedServiceId && (
-                      <p className="text-[11px] text-gray-400">
-                        Primero elige un servicio para ver las fechas disponibles.
-                      </p>
-                    )}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between py-2.5 px-3 rounded-2xl bg-pink-50">
+                  <div>
+                    <p className="text-xs font-medium text-gray-900">9:00 a. m. · Manicure spa</p>
+                    <p className="text-[11px] text-gray-500">Laura Gómez · Cliente frecuente</p>
                   </div>
+                  <span className="inline-flex items-center px-2 py-1 rounded-full text-[10px] font-semibold bg-white text-pink-500 border border-pink-100">
+                    Confirmada
+                  </span>
+                </div>
+                <div className="flex items-center justify-between py-2.5 px-3 rounded-2xl bg-white">
+                  <div>
+                    <p className="text-xs font-medium text-gray-900">11:00 a. m. · Corte + blower</p>
+                    <p className="text-[11px] text-gray-500">Carlos Ruiz · Nuevo cliente</p>
+                  </div>
+                  <span className="inline-flex items-center px-2 py-1 rounded-full text-[10px] font-semibold bg-yellow-50 text-yellow-600 border border-yellow-100">
+                    Pendiente
+                  </span>
+                </div>
+                <div className="flex items-center justify-between py-2.5 px-3 rounded-2xl bg-white">
+                  <div>
+                    <p className="text-xs font-medium text-gray-900">3:30 p. m. · Uñas acrílicas</p>
+                    <p className="text-[11px] text-gray-500">Mariana López · Instagram</p>
+                  </div>
+                  <span className="inline-flex items-center px-2 py-1 rounded-full text-[10px] font-semibold bg-green-50 text-green-600 border border-green-100">
+                    Pagada
+                  </span>
+                </div>
+              </div>
 
-                  {/* Paso 3: Hora */}
-                  <div className="space-y-2">
-                    <h4 className="text-xs font-semibold uppercase tracking-wide text-pink-500">
-                      Paso 3
-                    </h4>
-                    <label className="block text-sm font-medium text-gray-900 mb-1">
-                      Selecciona un horario
-                    </label>
-                    {loadingSlots ? (
-                      <div className="flex items-center gap-2 text-xs text-gray-500">
-                        <Loader2 className="w-4 h-4 animate-spin text-pink-500" />
-                        Cargando horarios disponibles...
-                      </div>
-                    ) : !selectedServiceId || !selectedDate ? (
-                      <p className="text-xs text-gray-400">
-                        Selecciona servicio y fecha para ver los horarios disponibles.
-                      </p>
-                    ) : slots.length === 0 ? (
-                      <p className="text-xs text-gray-500">
-                        No hay horarios disponibles para la fecha seleccionada. Prueba con otro día.
-                      </p>
-                    ) : (
-                      <div className="flex flex-wrap gap-2">
-                        {slots.map((slot) => (
-                          <button
-                            key={slot}
-                            type="button"
-                            onClick={() => setSelectedTime(slot)}
-                            className={classNames(
-                              'px-3 py-1.5 rounded-full text-xs font-medium border shadow-sm transition-all',
-                              selectedTime === slot
-                                ? 'bg-pink-500 text-white border-pink-500 shadow-md'
-                                : 'bg-white text-gray-700 border-gray-200 hover:bg-pink-50 hover:border-pink-300',
-                            )}
-                          >
-                            {slot}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
+              <div className="mt-3 grid grid-cols-3 gap-2 text-[11px] text-gray-600">
+                <div className="rounded-2xl bg-white border border-gray-100 p-2 flex flex-col gap-0.5">
+                  <span className="text-[10px] text-gray-500">Citas hoy</span>
+                  <span className="text-base font-semibold text-gray-900">8</span>
+                </div>
+                <div className="rounded-2xl bg-white border border-gray-100 p-2 flex flex-col gap-0.5">
+                  <span className="text-[10px] text-gray-500">Tasa asistencia</span>
+                  <span className="text-base font-semibold text-emerald-600">96%</span>
+                </div>
+                <div className="rounded-2xl bg-white border border-gray-100 p-2 flex flex-col gap-0.5">
+                  <span className="text-[10px] text-gray-500">Ingresos estimados</span>
+                  <span className="text-base font-semibold text-gray-900">$480K</span>
+                </div>
+              </div>
 
-                  {/* Paso 4: Datos del cliente */}
-                  <div className="space-y-2">
-                    <h4 className="text-xs font-semibold uppercase tracking-wide text-pink-500">
-                      Paso 4
-                    </h4>
-                    <p className="text-[11px] text-gray-500 mb-1">
-                      Cuéntanos quién eres para confirmar tu reserva.
-                    </p>
-                    <div className="grid sm:grid-cols-2 gap-3 text-xs sm:text-sm">
-                      <div className="space-y-1">
-                        <label className="block font-medium text-gray-900">Nombre completo</label>
-                        <input
-                          type="text"
-                          className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 shadow-sm focus:border-pink-500 focus:ring-2 focus:ring-pink-100 outline-none"
-                          value={clientName}
-                          onChange={(e) => setClientName(e.target.value)}
-                          placeholder="Tu nombre"
-                          required
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <label className="block font-medium text-gray-900">Teléfono / WhatsApp</label>
-                        <input
-                          type="tel"
-                          className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 shadow-sm focus:border-pink-500 focus:ring-2 focus:ring-pink-100 outline-none"
-                          value={clientPhone}
-                          onChange={(e) => setClientPhone(e.target.value)}
-                          placeholder="Tu número de contacto"
-                          required
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <label className="block font-medium text-gray-900">Email (opcional)</label>
-                        <input
-                          type="email"
-                          className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 shadow-sm focus:border-pink-500 focus:ring-2 focus:ring-pink-100 outline-none"
-                          value={clientEmail}
-                          onChange={(e) => setClientEmail(e.target.value)}
-                          placeholder="tucorreo@ejemplo.com"
-                        />
-                      </div>
-                      <div className="space-y-1 sm:col-span-2">
-                        <label className="block font-medium text-gray-900">
-                          Notas adicionales (opcional)
-                        </label>
-                        <textarea
-                          className="w-full min-h-[70px] rounded-xl border border-gray-200 bg-white px-3 py-2 text-xs sm:text-sm shadow-sm focus:border-pink-500 focus:ring-2 focus:ring-pink-100 outline-none resize-none"
-                          value={clientNotes}
-                          onChange={(e) => setClientNotes(e.target.value)}
-                          placeholder="Ej: color preferido, diseño, alergias, etc."
-                          maxLength={500}
-                        />
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="pt-2 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-                    <p className="text-[11px] text-gray-400 max-w-xs">
-                      Al confirmar tu reserva, aceptas ser contactado por el estilista para validar tu
-                      cita.
-                    </p>
-                    <button
-                      type="submit"
-                      disabled={submitting}
-                      className={classNames(
-                        'inline-flex items-center justify-center rounded-full px-6 py-2.5 text-xs sm:text-sm font-semibold shadow-sm transition-all',
-                        submitting
-                          ? 'bg-gray-300 text-gray-600 cursor-not-allowed'
-                          : 'bg-gradient-to-r from-pink-500 to-purple-500 text-white hover:shadow-md',
-                      )}
-                    >
-                      {submitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                      Confirmar reserva
-                    </button>
-                  </div>
-                </form>
-              )}
+              <div className="mt-4 flex items-center justify-between text-[11px] text-gray-500">
+                <div className="flex items-center gap-2">
+                  <Smartphone className="w-4 h-4 text-pink-500" />
+                  <span>Funciona perfecto en celular y tablet</span>
+                </div>
+                <span className="hidden sm:inline-flex items-center gap-1">
+                  <Clock className="w-3.5 h-3.5" />
+                  <span>Configura una vez, agenda siempre</span>
+                </span>
+              </div>
             </div>
           </div>
         </div>
-      )}
+      </Section>
 
-      {/* Lightbox Portafolio */}
-      {lightboxImage && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4"
-          onClick={() => setLightboxImage(null)}
-        >
-          <div
-            className="relative max-w-3xl max-h-[90vh] w-full flex flex-col items-center"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <img
-              src={lightboxImage.imageUrl}
-              alt={lightboxImage.description || lightboxImage?.service?.name || 'Trabajo de uñas'}
-              className="max-h-[80vh] w-auto rounded-2xl shadow-2xl object-contain"
+      {/* Beneficios */}
+      <Section id="beneficios" className="pt-4">
+        <SectionTitle
+          eyebrow="Beneficios principales"
+          title="Hecho para estilistas, manicuristas y salones de belleza"
+          subtitle="Olvídate de las agendas en papel, mensajes perdidos en WhatsApp y dobles reservas."
+        />
+
+        <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+          {benefits.map((benefit) => (
+            <BenefitCard key={benefit.title} {...benefit} />
+          ))}
+        </div>
+      </Section>
+
+      {/* Características */}
+      <Section id="caracteristicas" className="pt-0">
+        <SectionTitle
+          eyebrow="Características del sistema"
+          title="Todo lo que necesitas para manejar tu agenda como un negocio"
+          subtitle="Desde la primera reserva hasta el seguimiento de tus mejores clientes, todo en un solo lugar."
+        />
+
+        <div className="grid gap-5 md:grid-cols-3" id="demo">
+          {features.map((feature) => (
+            <FeatureCard key={feature.title} title={feature.title} points={feature.points} />
+          ))}
+        </div>
+      </Section>
+
+      {/* Cómo funciona */}
+      <Section id="como-funciona" className="pt-0">
+        <SectionTitle
+          eyebrow="En 3 pasos"
+          title="Ponte en modo agenda online sin complicarte"
+        />
+
+        <div className="grid gap-6 md:grid-cols-3">
+          {steps.map((step, index) => (
+            <Step
+              // eslint-disable-next-line react/no-array-index-key
+              key={index}
+              number={index + 1}
+              title={step.title}
+              description={step.description}
             />
-            <div className="mt-3 text-center text-xs sm:text-sm text-gray-100 max-w-xl">
-              {lightboxImage.service?.name && (
-                <p className="font-semibold">{lightboxImage.service.name}</p>
-              )}
-              {lightboxImage.description && <p className="mt-1 text-gray-200">{lightboxImage.description}</p>}
-            </div>
+          ))}
+        </div>
+      </Section>
+
+      {/* CTA final */}
+      <Section className="pt-0 pb-20">
+        <div className="bg-gradient-to-r from-pink-500 to-purple-500 rounded-3xl px-6 py-8 sm:px-10 sm:py-10 text-white flex flex-col md:flex-row md:items-center md:justify-between gap-6 shadow-xl">
+          <div>
+            <h2 className="text-xl sm:text-2xl font-semibold mb-2">
+              ¿Lista para dejar el cuaderno y pasarte a la agenda online?
+            </h2>
+            <p className="text-xs sm:text-sm text-pink-100 max-w-xl">
+              Crea tu cuenta hoy, configura tus servicios y horarios, y empieza a recibir reservas
+              mientras te enfocas en lo que más te gusta: hacer que tus clientes se vean y se sientan increíbles.
+            </p>
+          </div>
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+            <PrimaryButton href="/admin/register">
+              <span className="mr-1.5">Crear cuenta gratis</span>
+              <ArrowRight className="w-4 h-4" />
+            </PrimaryButton>
             <button
               type="button"
-              onClick={() => setLightboxImage(null)}
-              className="mt-4 inline-flex items-center justify-center rounded-full bg-white/90 px-5 py-1.5 text-xs sm:text-sm font-medium text-gray-800 shadow-sm hover:bg-white"
+              onClick={() => {
+                window.location.href = '/admin/login';
+              }}
+              className="inline-flex items-center justify-center px-5 py-3 rounded-full text-sm font-semibold text-pink-50/90 bg-white/10 hover:bg-white/15 border border-pink-200/40 transition-colors"
             >
-              Cerrar
+              Ya tengo cuenta
             </button>
           </div>
         </div>
-      )}
+      </Section>
+
+      {/* Footer */}
+      <footer className="border-t border-pink-100/70 bg-white/70 backdrop-blur text-[11px] text-gray-500">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex flex-col sm:flex-row items-center justify-between gap-2">
+          <p>
+            ©
+            {' '}
+            {new Date().getFullYear()}
+            {' '}
+            Nails Schedule. Pensado para profesionales de la belleza.
+          </p>
+          <p className="text-[10px]">
+            Hecho para estilistas, manicuristas, barberos, peluquerías y salones de belleza en Latinoamérica.
+          </p>
+        </div>
+      </footer>
     </div>
   );
 }
 
-export default LandingPage;

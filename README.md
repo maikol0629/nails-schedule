@@ -304,6 +304,42 @@ SUPABASE_ANON_KEY=<your-anon-key>
 PUBLIC_BOOKING_BUFFER_MINUTES=0   # minutos de anticipación mínima para reservar
 ```
 
+### Claves para Resend (emails) y Twilio (WhatsApp)
+
+El backend usa servicios externos para enviar correos de verificación y códigos por WhatsApp. Debes crear las cuentas y configurar las claves en `backend/.env`:
+
+#### 1) Resend (envío de emails)
+
+1. Crea una cuenta en [https://resend.com](https://resend.com) y entra al dashboard.
+2. Ve a **API Keys** y crea una nueva clave de tipo **Production** o **Test**.
+3. Copia la clave y añádela en `backend/.env` como:
+
+	```env
+	RESEND_API_KEY=your_resend_api_key
+	EMAIL_FROM="Nails Schedule <no-reply@tu-dominio.com>"
+	```
+
+4. (Opcional pero recomendado) Verifica un dominio o un email sender en Resend y úsalo en `EMAIL_FROM` para evitar que los correos lleguen a spam.
+
+#### 2) Twilio (envío de códigos por WhatsApp)
+
+1. Crea una cuenta en [https://www.twilio.com](https://www.twilio.com) y entra a la **Console**.
+2. En el panel principal copia:
+	- **Account SID**
+	- **Auth Token**
+3. Configura un número de WhatsApp de Twilio (puede ser uno de sandbox o uno verificado) y toma el número en formato E.164 (ej. `+14151234567`).
+4. Añade estas variables en `backend/.env`:
+
+	```env
+	TWILIO_ACCOUNT_SID=your_twilio_account_sid
+	TWILIO_AUTH_TOKEN=your_twilio_auth_token
+	TWILIO_WHATSAPP_FROM=whatsapp:+14151234567
+	```
+
+5. Asegúrate de que los números a los que envías mensajes están verificados si usas sandbox o cuenta de prueba.
+
+> Nota: sin estas claves, las funciones de verificación por email/WhatsApp simplemente fallarán al intentar enviar mensajes. El resto de la app (citas, servicios, etc.) puede seguir probándose en local.
+
 ### Frontend (`frontend/.env`)
 
 ```env

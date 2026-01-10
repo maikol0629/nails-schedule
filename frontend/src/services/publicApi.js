@@ -8,9 +8,9 @@ function extractErrorMessage(error, fallbackMessage) {
   return fallbackMessage;
 }
 
-export async function getStylistInfo(stylistId) {
+export async function getStylistInfo(slug) {
   try {
-    const response = await publicApi.get(`/api/public/stylist/${stylistId}/info`);
+    const response = await publicApi.get(`/api/public/stylist/${slug}/info`);
     return response.data;
   } catch (error) {
     console.error('Error fetching public stylist info:', error);
@@ -22,9 +22,9 @@ export async function getStylistInfo(stylistId) {
   }
 }
 
-export async function getPublicServices(stylistId) {
+export async function getPublicServices(slug) {
   try {
-    const response = await publicApi.get(`/api/public/stylist/${stylistId}/services`);
+    const response = await publicApi.get(`/api/public/stylist/${slug}/services`);
     return response.data;
   } catch (error) {
     console.error('Error fetching public services:', error);
@@ -36,9 +36,9 @@ export async function getPublicServices(stylistId) {
   }
 }
 
-export async function getPublicPortfolio(stylistId) {
+export async function getPublicPortfolio(slug) {
   try {
-    const response = await publicApi.get(`/api/public/stylist/${stylistId}/portfolio`);
+    const response = await publicApi.get(`/api/public/stylist/${slug}/portfolio`);
     return response.data;
   } catch (error) {
     console.error('Error fetching public portfolio:', error);
@@ -50,9 +50,9 @@ export async function getPublicPortfolio(stylistId) {
   }
 }
 
-export async function getAvailableSlots(stylistId, date, serviceId) {
+export async function getAvailableSlots(slug, date, serviceId) {
   try {
-    const response = await publicApi.get(`/api/public/stylist/${stylistId}/available-slots`, {
+    const response = await publicApi.get(`/api/public/stylist/${slug}/available-slots`, {
       params: { date, serviceId },
     });
     return response.data;
@@ -66,10 +66,10 @@ export async function getAvailableSlots(stylistId, date, serviceId) {
   }
 }
 
-export async function createAppointment(stylistId, appointmentData) {
+export async function createAppointment(slug, appointmentData) {
   try {
     const response = await publicApi.post(
-      `/api/public/stylist/${stylistId}/appointments`,
+		`/api/public/stylist/${slug}/appointments`,
       appointmentData,
     );
     return response.data;
