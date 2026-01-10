@@ -1,0 +1,58 @@
+.rbc-calendar {
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif;
+}
+
+.rbc-toolbar {
+  @apply flex flex-wrap items-center justify-between gap-2 mb-4;
+}
+
+.rbc-toolbar-label {
+  @apply text-sm font-semibold text-slate-800;
+}
+
+.rbc-btn-group button {
+  @apply text-xs px-2 py-1 rounded-md border border-slate-200 bg-white text-slate-600 hover:bg-slate-50;
+}
+
+.rbc-month-view,
+.rbc-time-view,
+.rbc-agenda-view {
+  @apply bg-white rounded-xl shadow-card border border-slate-100 p-2;
+}
+
+.rbc-time-slot,
+.rbc-header {
+  @apply text-xs text-slate-500;
+}
+
+.rbc-event {
+  @apply border-0 text-xs font-medium rounded-md px-1.5 py-0.5;
+}
+
+.rbc-event-status-PENDING {
+  @apply bg-amber-100 text-amber-800;
+}
+
+.rbc-event-status-CONFIRMED {
+  @apply bg-blue-100 text-blue-800;
+}
+
+.rbc-event-status-COMPLETED {
+  @apply bg-emerald-100 text-emerald-800;
+}
+
+.rbc-event-status-CANCELLED {
+  @apply bg-red-100 text-red-800 line-through;
+}
+
+.rbc-event-status-NO_SHOW {
+  @apply bg-slate-200 text-slate-700;
+}
+
+.rbc-today {
+  @apply bg-rose-50;
+}
+
+.rbc-selected {
+  @apply ring-2 ring-primary ring-offset-1;
+}
