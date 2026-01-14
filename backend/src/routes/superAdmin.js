@@ -45,6 +45,13 @@ router.post(
 // Listar estilistas con filtros y paginación
 router.get('/stylists', superAdminAuth, superAdminController.getAllStylists);
 
+// Resumen para dashboard de super admin
+router.get(
+  '/stylists/summary',
+  superAdminAuth,
+  superAdminController.getStylistsSummary,
+);
+
 // Suspender estilista
 router.patch(
   '/suspend-stylist/:userId',

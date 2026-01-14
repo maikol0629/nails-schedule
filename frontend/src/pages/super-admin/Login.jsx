@@ -5,6 +5,7 @@ import * as yup from 'yup';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
 import { useAuth } from '../../context/AuthContext.jsx';
+import apiClient from '../../services/apiConfig';
 
 const schema = yup.object({
   email: yup.string().email('Email inválido').required('El email es obligatorio'),
@@ -15,7 +16,7 @@ const schema = yup.object({
 });
 
 export default function SuperAdminLogin() {
-  const { user, loading, login } = useAuth();
+  const { user, loading, login, logout } = useAuth();
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -35,6 +36,21 @@ export default function SuperAdminLogin() {
   const onSubmit = async (values) => {
     try {
       await login(values.email, values.password);
+
+      // Verificar rol y estado de cuenta en el backend
+      const response = await apiClient.get('/api/auth/me');
+      const { status, role } = response.data || {};
+
+      if (status !== 'ACTIVE') {
+        await logout();
+        throw new Error('Tu cuenta de administrador aún no está activa.');
+      }
+
+      if (role !== 'SUPER_ADMIN') {
+        await logout();
+        throw new Error('Esta cuenta no tiene permisos de super administrador.');
+      }
+
       toast.success('Sesión iniciada correctamente');
       navigate('/super-admin/dashboard');
     } catch (error) {

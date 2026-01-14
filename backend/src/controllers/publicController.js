@@ -64,7 +64,7 @@ function getDayKeyFromDate(date) {
 	return days[date.getDay()];
 }
 
-async function validateNoOverlapPublic({ supabaseUserId, date, time, duration }) {
+async function validateNoOverlapPublic({ userId, date, time, duration }) {
 	const dateOnly = parseDateOnly(date);
 	if (!dateOnly) {
 		throw new Error('Fecha inválida para validación de solapamiento');
@@ -78,7 +78,7 @@ async function validateNoOverlapPublic({ supabaseUserId, date, time, duration })
 
 	const sameDayAppointments = await prisma.appointment.findMany({
 		where: {
-			supabaseUserId,
+			userId,
 			date: dateOnly,
 		},
 	});
@@ -99,7 +99,7 @@ async function validateNoOverlapPublic({ supabaseUserId, date, time, duration })
 	return true;
 }
 
-async function computeAvailableSlotsForDate({ supabaseUserId, date, serviceId }) {
+async function computeAvailableSlotsForDate({ userId, date, serviceId }) {
 	const dateOnly = parseDateOnly(date);
 	if (!dateOnly) {
 		throw new Error('Fecha inválida');
@@ -109,7 +109,7 @@ async function computeAvailableSlotsForDate({ supabaseUserId, date, serviceId })
 	const service = await prisma.service.findFirst({
 		where: {
 			id: serviceId,
-			supabaseUserId,
+			userId,
 			active: true,
 		},
 	});
@@ -120,7 +120,7 @@ async function computeAvailableSlotsForDate({ supabaseUserId, date, serviceId })
 
 	// Horario laboral del estilista (con valores por defecto si no hay configuración)
 	const existingBusinessHours = await prisma.businessHours.findFirst({
-		where: { supabaseUserId },
+		where: { userId },
 	});
 
 	const businessHours = existingBusinessHours || {
@@ -146,7 +146,7 @@ async function computeAvailableSlotsForDate({ supabaseUserId, date, serviceId })
 	// Verificar día bloqueado: si está bloqueado, no hay disponibilidad
 	const blocked = await prisma.blockedDay.findFirst({
 		where: {
-			supabaseUserId,
+			userId,
 			date: dateOnly,
 		},
 	});
@@ -177,7 +177,7 @@ async function computeAvailableSlotsForDate({ supabaseUserId, date, serviceId })
 	// Citas existentes para ese día
 	const appointments = await prisma.appointment.findMany({
 		where: {
-			supabaseUserId,
+			userId,
 			date: dateOnly,
 		},
 	});
@@ -308,11 +308,11 @@ async function getPublicServices(req, res) {
 
 	try {
 		const { user } = await getActiveStylistBySlug(slug);
-		const supabaseUserId = user.supabaseAuthId;
+		const userId = user.id;
 
 		const services = await prisma.service.findMany({
 			where: {
-				supabaseUserId,
+				userId,
 				active: true,
 			},
 			select: {
@@ -342,10 +342,10 @@ async function getPublicPortfolio(req, res) {
 
 	try {
 		const { user } = await getActiveStylistBySlug(slug);
-		const supabaseUserId = user.supabaseAuthId;
+		const userId = user.id;
 
 		const images = await prisma.portfolioImage.findMany({
-			where: { supabaseUserId },
+			where: { userId },
 			include: {
 				service: {
 					select: {
@@ -381,10 +381,10 @@ async function getAvailableSlots(req, res) {
 
 	try {
 		const { user } = await getActiveStylistBySlug(slug);
-		const supabaseUserId = user.supabaseAuthId;
+		const userId = user.id;
 
 		const slots = await computeAvailableSlotsForDate({
-			supabaseUserId,
+			userId,
 			date,
 			serviceId,
 		});
@@ -448,13 +448,13 @@ async function createPublicAppointment(req, res) {
 				.json({ message: 'La cita debe ser en el futuro' });
 		}
 
-		// Resolver estilista por slug y obtener supabaseUserId
+		// Resolver estilista por slug y obtener userId
 		const { user } = await getActiveStylistBySlug(slug);
-		const supabaseUserId = user.supabaseAuthId;
+		const userId = user.id;
 
 		// Verificar que la hora esté en los slots disponibles
 		const slots = await computeAvailableSlotsForDate({
-			supabaseUserId,
+			userId,
 			date,
 			serviceId: serviceIdStr,
 		});
@@ -468,7 +468,7 @@ async function createPublicAppointment(req, res) {
 		// Encontrar o crear cliente por teléfono
 		let client = await prisma.client.findFirst({
 			where: {
-				supabaseUserId,
+				userId,
 				phone: clientPhone,
 			},
 		});
@@ -484,7 +484,7 @@ async function createPublicAppointment(req, res) {
 		} else {
 			client = await prisma.client.create({
 				data: {
-					supabaseUserId,
+					userId,
 					name: clientName,
 					phone: clientPhone,
 					email: clientEmail || null,
@@ -496,7 +496,7 @@ async function createPublicAppointment(req, res) {
 		// Validar solapamiento como salvaguarda adicional
 		const duration = service.durationMinutes;
 		const noOverlap = await validateNoOverlapPublic({
-			supabaseUserId,
+			userId,
 			date,
 			time,
 			duration,
@@ -512,7 +512,7 @@ async function createPublicAppointment(req, res) {
 		const dateOnly = parseDateOnly(date);
 		const appointment = await prisma.appointment.create({
 			data: {
-				supabaseUserId,
+				userId,
 				clientId: client.id,
 				serviceId: serviceIdStr,
 				date: dateOnly,

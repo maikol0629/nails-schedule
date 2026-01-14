@@ -5,7 +5,6 @@
 
 const path = require('path');
 require('dotenv').config({ path: path.resolve(__dirname, '../../.env') });
-
 const {
 	AccountStatus,
 	UserRole,
@@ -14,7 +13,6 @@ const {
 } = require('@prisma/client');
 
 const prisma = require('../config/prisma');
-const { supabase } = require('../config/supabase');
 
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
 
@@ -57,68 +55,130 @@ const STYLISTS = [
 	},
 ];
 
-async function ensureSupabaseUser(email, password, fullName) {
-	// Este helper crea el usuario en Supabase si no existe.
-	// Si ya existe, intenta iniciar sesión para obtener su id.
-	const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
-		email,
-		password,
-		options: {
-			data: { full_name: fullName },
-		},
-	});
+const { supabaseAdmin } = require('../config/supabaseAdmin');
 
-	if (!signUpError && signUpData?.user) {
-		return signUpData.user.id;
-	}
+async function ensureSupabaseUser({ email, password, fullName }) {
+	try {
+		// 1. Listar usuarios filtrando por email
+		const { data: listData, error: listError } = 
+			await supabaseAdmin.auth.admin.listUsers();
 
-	// Si el usuario ya existe, intentamos iniciar sesión para recuperar su id
-	const message = (signUpError && signUpError.message ? signUpError.message : '').toLowerCase();
-	if (message.includes('already') || message.includes('registered') || message.includes('exists')) {
-		const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
-			email,
-			password,
-		});
-		if (signInError || !signInData?.user) {
-			console.error('[seed] Supabase user existe pero no se pudo iniciar sesión', signInError);
-			throw new Error('No se pudo recuperar el usuario de Supabase');
+		if (listError) {
+			console.error('[seed][auth] Error listando usuarios:', listError);
+			throw new Error(`Error al listar usuarios: ${listError.message}`);
 		}
-		return signInData.user.id;
-	}
 
-	console.error('[seed] Error creando usuario en Supabase:', signUpError);
-	throw new Error('No se pudo crear el usuario en Supabase');
+		// Buscar el usuario con el email específico
+		const existingUser = listData?.users?.find(u => u.email === email);
+
+		if (existingUser) {
+			// Si el usuario existe pero el email no está confirmado, lo marcamos como confirmado
+			if (!existingUser.email_confirmed_at) {
+				try {
+					const { data: updated } = await supabaseAdmin.auth.admin.updateUserById(existingUser.id, {
+						email_confirm: true,
+						user_metadata: {
+							...(existingUser.user_metadata || {}),
+							full_name: fullName,
+							seeded: true,
+						},
+					});
+					console.log(`  ✓ Usuario existente confirmado en Supabase: ${email}`);
+					return updated.user.id;
+				} catch (updateError) {
+					console.error('[seed][auth] Error confirmando usuario existente:', updateError);
+					return existingUser.id;
+				}
+			}
+
+			console.log(`  ✓ Usuario ya existe en Supabase: ${email}`);
+			return existingUser.id;
+		}
+
+		// 2. Crear usuario si no existe
+		console.log(`  → Creando nuevo usuario en Supabase: ${email}`);
+		const { data: created, error: createError } =
+			await supabaseAdmin.auth.admin.createUser({
+				email,
+				password,
+				email_confirm: true,
+				user_metadata: {
+					full_name: fullName,
+					seeded: true,
+				},
+			});
+
+		if (createError || !created?.user) {
+			console.error('[seed][auth] Error creando usuario:', createError);
+			throw new Error(`No se pudo crear usuario en Supabase Auth: ${createError?.message}`);
+		}
+
+		console.log(`  ✓ Usuario creado en Supabase: ${email}`);
+		return created.user.id;
+	} catch (error) {
+		console.error('[seed][auth] Error en ensureSupabaseUser:', error);
+		throw error;
+	}
 }
 
 async function ensureAppUser({ email, password, role, status, fullName }) {
-	// Buscar usuario de aplicación existente por email
-	let appUser = await prisma.user.findUnique({ where: { email } });
+	try {
+		const supabaseAuthId = await ensureSupabaseUser({
+			email,
+			password,
+			fullName,
+		});
 
-	if (appUser) {
-		// Aseguramos que tenga el rol y estado deseados
-		if (appUser.role !== role || appUser.status !== status) {
-			appUser = await prisma.user.update({
-				where: { email },
-				data: { role, status },
+		// 1. Buscar por supabaseAuthId (fuente de verdad)
+		const userByAuthId = await prisma.user.findUnique({
+			where: { supabaseAuthId },
+		});
+
+		if (userByAuthId) {
+			console.log(`  ✓ Usuario encontrado por authId, actualizando...`);
+			return prisma.user.update({
+				where: { supabaseAuthId },
+				data: {
+					email,
+					role,
+					status
+				},
 			});
 		}
-		return appUser;
+
+		// 2. Buscar por email (posible registro viejo / inconsistente)
+		const userByEmail = await prisma.user.findUnique({
+			where: { email },
+		});
+
+		if (userByEmail) {
+			console.log(`  ✓ Usuario encontrado por email, vinculando authId...`);
+			return prisma.user.update({
+				where: { email },
+				data: {
+					supabaseAuthId,
+					role,
+					status
+				},
+			});
+		}
+
+		// 3. Crear usuario nuevo
+		console.log(`  → Creando nuevo usuario en BD: ${email}`);
+		return prisma.user.create({
+			data: {
+				email,
+				supabaseAuthId,
+				role,
+				status
+			},
+		});
+	} catch (error) {
+		console.error('[seed][ensureAppUser] Error:', error);
+		throw error;
 	}
-
-	// Si no existe en Prisma, nos aseguramos de tener el usuario en Supabase
-	const supabaseAuthId = await ensureSupabaseUser(email, password, fullName);
-
-	appUser = await prisma.user.create({
-		data: {
-			email,
-			supabaseAuthId,
-			role,
-			status,
-		},
-	});
-
-	return appUser;
 }
+
 
 function getServicesForCategory(businessCategory) {
 	if (businessCategory === BusinessCategory.BARBERSHOP) {
@@ -240,181 +300,203 @@ function getPortfolioImagesForCategory(businessCategory) {
 
 async function seedSuperAdmin() {
 	console.log('\n[1] Creando / asegurando Super Admin...');
-	const appUser = await ensureAppUser({
-		email: SUPER_ADMIN_EMAIL,
-		password: SUPER_ADMIN_PASSWORD,
-		role: UserRole.SUPER_ADMIN,
-		status: AccountStatus.ACTIVE,
-		fullName: 'Super Admin',
-	});
-	console.log(`✓ Super Admin listo: ${appUser.email}`);
-	return appUser;
+	try {
+		const appUser = await ensureAppUser({
+			email: SUPER_ADMIN_EMAIL,
+			password: SUPER_ADMIN_PASSWORD,
+			role: UserRole.SUPER_ADMIN,
+			status: AccountStatus.ACTIVE,
+			fullName: 'Super Admin',
+		});
+		console.log(`✓ Super Admin listo: ${appUser.email} (ID: ${appUser.id})`);
+		return appUser;
+	} catch (error) {
+		console.error('Error creando Super Admin:', error);
+		throw error;
+	}
 }
 
 async function seedStylist(stylist, superAdminUser) {
 	console.log(`\n[2] Creando / asegurando estilista: ${stylist.label}...`);
 
-	const appUser = await ensureAppUser({
-		email: stylist.email,
-		password: stylist.password,
-		role: UserRole.STYLIST,
-		status: stylist.status,
-		fullName: stylist.ownerName,
-	});
+	try {
+		const appUser = await ensureAppUser({
+			email: stylist.email,
+			password: stylist.password,
+			role: UserRole.STYLIST,
+			status: stylist.status,
+			fullName: stylist.ownerName,
+		});
 
-	// Crear / actualizar StylistProfile
-	const profileData = {
-		businessName: stylist.businessName,
-		ownerName: stylist.ownerName,
-		category: stylist.category,
-		slug: stylist.slug,
-		name: stylist.businessName,
-		bio: `Perfil de ejemplo para ${stylist.businessName}.`,
-		phone: '+57 300 000 0000',
-		whatsapp: '+57 300 000 0000',
-		email: stylist.email,
-		emailVerified: stylist.status !== AccountStatus.PENDING_VERIFICATION,
-		whatsappVerified: stylist.status === AccountStatus.ACTIVE,
-		emailVerifiedAt: stylist.status !== AccountStatus.PENDING_VERIFICATION ? new Date() : null,
-		whatsappVerifiedAt: stylist.status === AccountStatus.ACTIVE ? new Date() : null,
-		approvedBy: stylist.status === AccountStatus.ACTIVE ? superAdminUser.id : null,
-		approvedAt: stylist.status === AccountStatus.ACTIVE ? new Date() : null,
-		primaryColor: stylist.primaryColor,
-		city: 'Bogotá',
-		country: 'Colombia',
-		instagram: '@' + stylist.slug.replace('-', '.'),
-		address: 'Calle 123 #45-67',
-		photoUrl:
-			'https://images.pexels.com/photos/3738349/pexels-photo-3738349.jpeg?auto=compress&cs=tinysrgb&w=800',
-	};
+		console.log(`  ✓ Usuario app creado/actualizado: ${appUser.email} (ID: ${appUser.id})`);
 
-	await prisma.stylistProfile.upsert({
-		where: { userId: appUser.id },
-		update: profileData,
-		create: {
-			userId: appUser.id,
-			...profileData,
-		},
-	});
+		// Crear / actualizar StylistProfile
+		const profileData = {
+			businessName: stylist.businessName,
+			ownerName: stylist.ownerName,
+			category: stylist.category,
+			slug: stylist.slug,
+			name: stylist.businessName,
+			bio: `Perfil de ejemplo para ${stylist.businessName}.`,
+			phone: '+57 300 000 0000',
+			whatsapp: '+57 300 000 0000',
+			email: stylist.email,
+			emailVerified: stylist.status !== AccountStatus.PENDING_VERIFICATION,
+			whatsappVerified: stylist.status === AccountStatus.ACTIVE,
+			emailVerifiedAt: stylist.status !== AccountStatus.PENDING_VERIFICATION ? new Date() : null,
+			whatsappVerifiedAt: stylist.status === AccountStatus.ACTIVE ? new Date() : null,
+			approvedBy: stylist.status === AccountStatus.ACTIVE ? superAdminUser.id : null,
+			approvedAt: stylist.status === AccountStatus.ACTIVE ? new Date() : null,
+			primaryColor: stylist.primaryColor,
+			city: 'Bogotá',
+			country: 'Colombia',
+			instagram: '@' + stylist.slug.replace('-', '.'),
+			address: 'Calle 123 #45-67',
+			photoUrl:
+				'https://images.pexels.com/photos/3738349/pexels-photo-3738349.jpeg?auto=compress&cs=tinysrgb&w=800',
+		};
 
-	console.log('  ✓ Perfil de estilista configurado');
-
-	// Solo sembramos servicios, horarios y portafolio para estilistas activos
-	if (stylist.status !== AccountStatus.ACTIVE) {
-		console.log('  (Estado no es ACTIVE, se omiten servicios/horarios/portafolio)');
-		return { appUser, createdServices: [], supabaseUserId: appUser.supabaseAuthId };
-	}
-
-	const supabaseUserId = appUser.supabaseAuthId;
-
-	// BusinessHours estándar
-	await prisma.businessHours.upsert({
-		where: { supabaseUserId },
-		update: {
-			monday: true,
-			tuesday: true,
-			wednesday: true,
-			thursday: true,
-			friday: true,
-			saturday: stylist.category === BusinessCategory.BARBERSHOP || stylist.category === BusinessCategory.NAIL_SPA,
-			sunday: false,
-			startTime: '09:00',
-			endTime: '18:00',
-			slotDuration: 30,
-		},
-		create: {
-			supabaseUserId,
-			monday: true,
-			tuesday: true,
-			wednesday: true,
-			thursday: true,
-			friday: true,
-			saturday: stylist.category === BusinessCategory.BARBERSHOP || stylist.category === BusinessCategory.NAIL_SPA,
-			sunday: false,
-			startTime: '09:00',
-			endTime: '18:00',
-			slotDuration: 30,
-		},
-	});
-	console.log('  ✓ Horarios configurados');
-
-	// Servicios de ejemplo según categoría
-	await prisma.service.deleteMany({ where: { supabaseUserId } });
-	const servicesData = getServicesForCategory(stylist.category);
-	const createdServices = [];
-	for (const svc of servicesData) {
-		const created = await prisma.service.create({
-			data: {
-				supabaseUserId,
-				name: svc.name,
-				description: svc.description,
-				durationMinutes: svc.durationMinutes,
-				price: svc.price,
-				category: svc.category,
-				active: true,
+		await prisma.stylistProfile.upsert({
+			where: { userId: appUser.id },
+			update: profileData,
+			create: {
+				userId: appUser.id,
+				...profileData,
 			},
 		});
-		createdServices.push(created);
-	}
-	console.log(`  ✓ ${createdServices.length} servicios creados`);
 
-	// Portafolio de ejemplo
-	await prisma.portfolioImage.deleteMany({ where: { supabaseUserId } });
-	const portfolioImages = getPortfolioImagesForCategory(stylist.category);
-	for (let i = 0; i < portfolioImages.length; i += 1) {
-		const imageUrl = portfolioImages[i];
-		await prisma.portfolioImage.create({
-			data: {
-				supabaseUserId,
-				imageUrl,
-				description: `Trabajo de ejemplo #${i + 1} - ${stylist.businessName}`,
-				serviceId: createdServices[i % createdServices.length].id,
+		console.log('  ✓ Perfil de estilista configurado');
+
+		// Solo sembramos servicios, horarios y portafolio para estilistas activos
+		if (stylist.status !== AccountStatus.ACTIVE) {
+			console.log('  (Estado no es ACTIVE, se omiten servicios/horarios/portafolio)');
+			return { appUser, createdServices: [], supabaseAuthId: appUser.supabaseAuthId };
+		}
+
+		const userId = appUser.id;
+
+		// BusinessHours estándar
+		await prisma.businessHours.upsert({
+			where: { userId },
+			update: {
+				monday: true,
+				tuesday: true,
+				wednesday: true,
+				thursday: true,
+				friday: true,
+				saturday: stylist.category === BusinessCategory.BARBERSHOP || stylist.category === BusinessCategory.NAIL_SPA,
+				sunday: false,
+				startTime: '09:00',
+				endTime: '18:00',
+				slotDuration: 30,
+			},
+			create: {
+				userId,
+				monday: true,
+				tuesday: true,
+				wednesday: true,
+				thursday: true,
+				friday: true,
+				saturday: stylist.category === BusinessCategory.BARBERSHOP || stylist.category === BusinessCategory.NAIL_SPA,
+				sunday: false,
+				startTime: '09:00',
+				endTime: '18:00',
+				slotDuration: 30,
 			},
 		});
-	}
-	console.log(`  ✓ ${portfolioImages.length} imágenes de portafolio creadas`);
+		console.log('  ✓ Horarios configurados');
 
-	return { appUser, createdServices, supabaseUserId };
+		// Servicios de ejemplo según categoría
+		await prisma.service.deleteMany({ where: { userId } });
+		const servicesData = getServicesForCategory(stylist.category);
+		const createdServices = [];
+		for (const svc of servicesData) {
+			const created = await prisma.service.create({
+				data: {
+					userId,
+					name: svc.name,
+					description: svc.description,
+					durationMinutes: svc.durationMinutes,
+					price: svc.price,
+					category: svc.category,
+					active: true,
+				},
+			});
+			createdServices.push(created);
+		}
+		console.log(`  ✓ ${createdServices.length} servicios creados`);
+
+		// Portafolio de ejemplo
+		await prisma.portfolioImage.deleteMany({ where: { userId } });
+		const portfolioImages = getPortfolioImagesForCategory(stylist.category);
+		for (let i = 0; i < portfolioImages.length; i += 1) {
+			const imageUrl = portfolioImages[i];
+			await prisma.portfolioImage.create({
+				data: {
+					userId,
+					imageUrl,
+					description: `Trabajo de ejemplo #${i + 1} - ${stylist.businessName}`,
+					serviceId: createdServices[i % createdServices.length].id,
+				},
+			});
+		}
+		console.log(`  ✓ ${portfolioImages.length} imágenes de portafolio creadas`);
+
+		return { appUser, createdServices, supabaseAuthId: appUser.supabaseAuthId };
+	} catch (error) {
+		console.error(`Error creando estilista ${stylist.label}:`, error);
+		throw error;
+	}
 }
 
 async function main() {
 	console.log('Iniciando seed multi-tenant...');
-
-	// 1. Super Admin
-	const superAdminUser = await seedSuperAdmin();
-
-	// 2. Estilistas de ejemplo
-	const seededStylists = [];
-	for (const stylist of STYLISTS) {
-		// eslint-disable-next-line no-await-in-loop
-		const result = await seedStylist(stylist, superAdminUser);
-		seededStylists.push({ stylist, result });
-	}
-
-	// 3. Resumen final
-	console.log('\n=========================================');
-	console.log('Seed multi-tenant completado correctamente');
 	console.log('=========================================\n');
 
-	console.log('Super Admin:');
-	console.log(`- Email: ${SUPER_ADMIN_EMAIL}`);
-	console.log(`- Password: ${SUPER_ADMIN_PASSWORD}`);
-	console.log(`- URL panel Super Admin: ${FRONTEND_URL}/super-admin/login`);
+	try {
+		// 1. Super Admin
+		const superAdminUser = await seedSuperAdmin();
 
-	console.log('\nEstilistas de ejemplo:');
-	seededStylists.forEach(({ stylist }) => {
-		console.log(`\n[${stylist.label}]`);
-		console.log(`- Email: ${stylist.email}`);
-		console.log(`- Password: ${stylist.password}`);
-		console.log(`- Estado: ${stylist.status}`);
-		console.log(`- Categoría: ${stylist.category}`);
-		console.log(`- Landing pública: ${FRONTEND_URL}/${stylist.slug}`);
-	});
+		// 2. Estilistas de ejemplo
+		const seededStylists = [];
+		for (const stylist of STYLISTS) {
+			// eslint-disable-next-line no-await-in-loop
+			const result = await seedStylist(stylist, superAdminUser);
+			seededStylists.push({ stylist, result });
+		}
+
+		// 3. Resumen final
+		console.log('\n=========================================');
+		console.log('Seed multi-tenant completado correctamente');
+		console.log('=========================================\n');
+
+		console.log('Super Admin:');
+		console.log(`- Email: ${SUPER_ADMIN_EMAIL}`);
+		console.log(`- Password: ${SUPER_ADMIN_PASSWORD}`);
+		console.log(`- URL panel Super Admin: ${FRONTEND_URL}/super-admin/login`);
+
+		console.log('\nEstilistas de ejemplo:');
+		seededStylists.forEach(({ stylist, result }) => {
+			console.log(`\n[${stylist.label}]`);
+			console.log(`- Email: ${stylist.email}`);
+			console.log(`- Password: ${stylist.password}`);
+			console.log(`- Estado: ${stylist.status}`);
+			console.log(`- Categoría: ${stylist.category}`);
+			console.log(`- User ID: ${result.appUser.id}`);
+			console.log(`- Supabase Auth ID: ${result.supabaseUserId}`);
+			console.log(`- Landing pública: ${FRONTEND_URL}/${stylist.slug}`);
+		});
+
+		console.log('\n✓ Todos los usuarios fueron creados exitosamente');
+	} catch (error) {
+		console.error('\n❌ Error durante el seed:', error);
+		throw error;
+	}
 }
 
 main()
 	.catch((err) => {
-		console.error('Seed falló con error:', err);
+		console.error('\n❌ Seed falló con error:', err);
 		process.exitCode = 1;
 	})
 	.finally(async () => {

@@ -27,7 +27,7 @@ model User {
 
 model Service {
   id              String   @id @default(cuid())
-  supabaseUserId  String
+  userId          String
   name            String
   description     String?  @db.Text
   durationMinutes Int
@@ -40,14 +40,14 @@ model Service {
   appointments    Appointment[]
   portfolioImages PortfolioImage[]
 
-  @@index([supabaseUserId])
+  @@index([userId])
   @@index([category])
   @@index([active])
 }
 
 model Client {
   id             String   @id @default(cuid())
-  supabaseUserId String
+  userId         String
   name           String
   phone          String
   email          String?
@@ -57,14 +57,14 @@ model Client {
 
   appointments Appointment[]
 
-  @@index([supabaseUserId])
+  @@index([userId])
   @@index([name])
   @@index([phone])
 }
 
 model Appointment {
   id             String            @id @default(cuid())
-  supabaseUserId String
+  userId         String
   clientId       String
   serviceId      String
   date           DateTime          @db.Date
@@ -78,7 +78,7 @@ model Appointment {
   client  Client  @relation(fields: [clientId], references: [id], onDelete: Cascade)
   service Service @relation(fields: [serviceId], references: [id], onDelete: Restrict)
 
-  @@index([supabaseUserId])
+  @@index([userId])
   @@index([clientId])
   @@index([serviceId])
   @@index([date, time])
@@ -87,7 +87,7 @@ model Appointment {
 
 model PortfolioImage {
   id             String   @id @default(cuid())
-  supabaseUserId String
+  userId         String
   serviceId      String?
   imageUrl       String
   description    String?  @db.Text
@@ -96,7 +96,7 @@ model PortfolioImage {
 
   service Service? @relation(fields: [serviceId], references: [id], onDelete: SetNull)
 
-  @@index([supabaseUserId])
+  @@index([userId])
   @@index([serviceId])
 }
 
@@ -139,7 +139,7 @@ model StylistProfile {
 
 model BusinessHours {
   id             String   @id @default(cuid())
-  supabaseUserId String   @unique
+  userId         String   @unique
   monday         Boolean  @default(true)
   tuesday        Boolean  @default(true)
   wednesday      Boolean  @default(true)
@@ -156,13 +156,13 @@ model BusinessHours {
 
 model BlockedDay {
   id             String   @id @default(cuid())
-  supabaseUserId String
+  userId         String
   date           DateTime @db.Date
   reason         String?
   createdAt      DateTime @default(now())
 
-  @@unique([supabaseUserId, date])
-  @@index([supabaseUserId])
+  @@unique([userId, date])
+  @@index([userId])
   @@index([date])
 }
 

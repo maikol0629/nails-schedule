@@ -5,6 +5,7 @@ import * as yup from 'yup';
 import { Link, useNavigate } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
 import { useAuth } from '../context/AuthContext.jsx';
+import apiClient from '../services/apiConfig';
 
 const schema = yup.object({
 	email: yup
@@ -18,7 +19,7 @@ const schema = yup.object({
 });
 
 export default function Login() {
-	const { user, loading, login } = useAuth();
+	const { user, loading, login, logout } = useAuth();
 	const navigate = useNavigate();
 
 	useEffect(() => {
@@ -38,6 +39,16 @@ export default function Login() {
 	const onSubmit = async (values) => {
 		try {
 			await login(values.email, values.password);
+
+			// Validar el estado de la cuenta en el backend
+			const response = await apiClient.get('/api/auth/me');
+			const { status } = response.data || {};
+
+			if (status !== 'ACTIVE') {
+				await logout();
+				throw new Error('Tu cuenta aún no está activa. Revisa tu email/WhatsApp o espera la aprobación.');
+			}
+
 			toast.success('Sesión iniciada correctamente');
 			navigate('/admin/dashboard');
 		} catch (error) {

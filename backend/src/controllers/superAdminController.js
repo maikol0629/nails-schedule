@@ -115,9 +115,9 @@ async function approveStylist(req, res, next) {
 
       if (user.supabaseAuthId) {
         await tx.businessHours.upsert({
-          where: { supabaseUserId: user.supabaseAuthId },
+          where: { userId: user.id },
           create: {
-            supabaseUserId: user.supabaseAuthId,
+            userId: user.id,
             monday: true,
             tuesday: true,
             wednesday: true,
@@ -462,3 +462,108 @@ module.exports = {
   activateStylist,
   getAuditLogs,
 };
+
+// 8. Resumen para dashboard de super admin
+async function getStylistsSummary(req, res, next) {
+  try {
+    const now = new Date();
+    const sevenDaysAgo = new Date(now);
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+    const oneYearAgo = new Date(now);
+    oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
+
+    const [
+      totalActive,
+      totalPendingApproval,
+      newLast7Days,
+      byCategoryRaw,
+      registrations,
+    ] = await Promise.all([
+      prisma.user.count({
+        where: {
+          role: UserRole.STYLIST,
+          status: AccountStatus.ACTIVE,
+        },
+      }),
+      prisma.user.count({
+        where: {
+          role: UserRole.STYLIST,
+          status: AccountStatus.PENDING_APPROVAL,
+        },
+      }),
+      prisma.user.count({
+        where: {
+          role: UserRole.STYLIST,
+          createdAt: { gte: sevenDaysAgo },
+        },
+      }),
+      // Agrupación por categoría del perfil de estilista
+      prisma.stylistProfile.groupBy({
+        by: ['category'],
+        where: {
+          user: {
+            role: UserRole.STYLIST,
+            status: AccountStatus.ACTIVE,
+          },
+        },
+        _count: {
+          _all: true,
+        },
+      }),
+      // Registros de estilistas por mes (últimos 12 meses)
+      prisma.user.findMany({
+        where: {
+          role: UserRole.STYLIST,
+          createdAt: { gte: oneYearAgo },
+        },
+        select: { createdAt: true },
+      }),
+    ]);
+
+    // Normalizar categorías
+    const byCategory = byCategoryRaw.map((row) => ({
+      category: row.category,
+      count: row._count._all,
+    }));
+
+    // Construir datos mensuales para los últimos 12 meses
+    const monthKey = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    const monthLabels = [];
+    const monthCounts = {};
+
+    for (let i = 11; i >= 0; i -= 1) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const key = monthKey(d);
+      monthLabels.push({ key, label: key });
+      monthCounts[key] = 0;
+    }
+
+    registrations.forEach((u) => {
+      const d = u.createdAt;
+      const key = monthKey(d);
+      if (Object.prototype.hasOwnProperty.call(monthCounts, key)) {
+        monthCounts[key] += 1;
+      }
+    });
+
+    const registrationsByMonth = monthLabels.map(({ key, label }) => ({
+      month: label,
+      count: monthCounts[key] || 0,
+    }));
+
+    return res.json({
+      totalActive,
+      totalPendingApproval,
+      newLast7Days,
+      byCategory,
+      registrationsByMonth,
+    });
+  } catch (error) {
+    console.error('[superAdminController] getStylistsSummary error', error);
+    if (!error.status) error.status = 500;
+    return next(error);
+  }
+}
+
+module.exports.getStylistsSummary = getStylistsSummary;

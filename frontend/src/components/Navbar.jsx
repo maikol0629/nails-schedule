@@ -17,7 +17,7 @@ export default function Navbar() {
   const handleLogout = async () => {
     try {
       await logout();
-      navigate('/login', { replace: true });
+      navigate('/admin/login', { replace: true });
     } catch (error) {
       console.error('Error cerrando sesión:', error);
     }

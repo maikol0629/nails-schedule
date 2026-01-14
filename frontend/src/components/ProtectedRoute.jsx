@@ -4,7 +4,7 @@ import apiClient from '../services/apiConfig';
 import { useAuth } from '../context/AuthContext.jsx';
 
 export default function ProtectedRoute({ children, requiredRole }) {
-	const { user, loading } = useAuth();
+	const { user, loading, logout } = useAuth();
 	const location = useLocation();
 	const [checking, setChecking] = useState(true);
 	const [appUser, setAppUser] = useState(null);
@@ -79,8 +79,23 @@ export default function ProtectedRoute({ children, requiredRole }) {
 
 	if (appUser.status && appUser.status !== 'ACTIVE') {
 		return (
-			<div className="min-h-screen flex items-center justify-center bg-slate-50">
+			<div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 gap-4">
 				<div className="text-slate-600 text-center text-sm">Cuenta inactiva</div>
+				<button
+					type="button"
+					onClick={async () => {
+						try {
+							await logout();
+							window.location.href = isSuperAdminPath ? '/super-admin/login' : '/admin/login';
+						} catch (e) {
+							// eslint-disable-next-line no-console
+							console.error('Error cerrando sesión:', e);
+						}
+					}}
+					className="inline-flex items-center justify-center rounded-lg bg-slate-900 px-4 py-2 text-xs font-medium text-white hover:bg-slate-800"
+				>
+					Cerrar sesión
+				</button>
 			</div>
 		);
 	}

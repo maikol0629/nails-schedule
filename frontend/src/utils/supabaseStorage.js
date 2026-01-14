@@ -10,13 +10,13 @@ export async function uploadImage(file, userId) {
 		throw new Error('userId es requerido para generar la ruta de la imagen');
 	}
 
-	const safeName = file.name || 'image';
-	const path = `${userId}/${Date.now()}_${safeName}`;
+	const fileName = `${Date.now()}_${file.name}`;
+	const filePath = `${userId}/${fileName}`; // lo que se guarda en Storage
 
 	const { error: uploadError } = await supabase
 		.storage
 		.from(BUCKET_NAME)
-		.upload(path, file, {
+		.upload(filePath, file, {
 			cacheControl: '3600',
 			upsert: false,
 		});
@@ -26,12 +26,12 @@ export async function uploadImage(file, userId) {
 		throw uploadError;
 	}
 
-	const { data: publicData } = supabase
-		.storage
-		.from(BUCKET_NAME)
-		.getPublicUrl(path);
+	// Generar URL pública
+	const { data } = supabase.storage.from(BUCKET_NAME).getPublicUrl(filePath);
+	const publicUrl = data.publicUrl;
 
-	return publicData?.publicUrl || null;
+	// Devuelve la URL pública para que el front la mande al backend
+	return publicUrl;
 }
 
 export async function deleteImage(imageUrl) {

@@ -161,7 +161,9 @@ export default function ProfilePage() {
   };
 
   const handlePreviewClick = () => {
-    window.open('/', '_blank', 'noopener,noreferrer');
+    let path = name.trim().toLowerCase().replace(/\s+/g, '-');
+    console.log(path);
+    window.open(`/${path}`, '_blank', 'noopener,noreferrer');
   };
 
   const displayName = name.trim() || user?.user_metadata?.full_name || user?.email || 'Tu nombre';
