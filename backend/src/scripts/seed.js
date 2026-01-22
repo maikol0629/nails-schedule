@@ -19,38 +19,17 @@ const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
 const SUPER_ADMIN_EMAIL = process.env.SEED_SUPERADMIN_EMAIL || 'admin@tuapp.com';
 const SUPER_ADMIN_PASSWORD = process.env.SEED_SUPERADMIN_PASSWORD || 'Admin123!';
 
+// Un único estilista de ejemplo
 const STYLISTS = [
 	{
-		label: 'Barbería clásica',
-		email: process.env.SEED_BARBERSHOP_EMAIL || 'barberia.clasica@tuapp.com',
-		password: process.env.SEED_BARBERSHOP_PASSWORD || 'Stylist123!',
-		slug: 'barberia-clasica',
-		businessName: 'Barbería Clásica',
-		ownerName: 'Carlos Barber',
-		category: BusinessCategory.BARBERSHOP,
-		status: AccountStatus.ACTIVE,
-		primaryColor: '#0EA5E9',
-	},
-	{
-		label: 'Salón elegante',
-		email: process.env.SEED_HAIR_SALON_EMAIL || 'salon.elegante@tuapp.com',
-		password: process.env.SEED_HAIR_SALON_PASSWORD || 'Stylist123!',
-		slug: 'salon-elegante',
-		businessName: 'Salón Elegante',
-		ownerName: 'María Estilo',
-		category: BusinessCategory.HAIR_SALON,
-		status: AccountStatus.ACTIVE,
-		primaryColor: '#EC4899',
-	},
-	{
-		label: 'Nails spa (pendiente aprobación)',
+		label: 'Nails Spa Demo',
 		email: process.env.SEED_NAIL_SPA_EMAIL || 'nails.spa@tuapp.com',
 		password: process.env.SEED_NAIL_SPA_PASSWORD || 'Stylist123!',
 		slug: 'nails-spa',
 		businessName: 'Nails Spa',
 		ownerName: 'Laura Nails',
 		category: BusinessCategory.NAIL_SPA,
-		status: AccountStatus.PENDING_APPROVAL,
+		status: AccountStatus.ACTIVE,
 		primaryColor: '#A855F7',
 	},
 ];
@@ -343,7 +322,7 @@ async function seedStylist(stylist, superAdminUser) {
 			email: stylist.email,
 			emailVerified: stylist.status !== AccountStatus.PENDING_VERIFICATION,
 			whatsappVerified: stylist.status === AccountStatus.ACTIVE,
-			emailVerifiedAt: stylist.status !== AccountStatus.PENDING_VERIFICATION ? new Date() : null,
+			isVerifiedAt: stylist.status !== AccountStatus.PENDING_VERIFICATION ? new Date() : null,
 			whatsappVerifiedAt: stylist.status === AccountStatus.ACTIVE ? new Date() : null,
 			approvedBy: stylist.status === AccountStatus.ACTIVE ? superAdminUser.id : null,
 			approvedAt: stylist.status === AccountStatus.ACTIVE ? new Date() : null,
@@ -475,7 +454,7 @@ async function main() {
 		console.log(`- Password: ${SUPER_ADMIN_PASSWORD}`);
 		console.log(`- URL panel Super Admin: ${FRONTEND_URL}/super-admin/login`);
 
-		console.log('\nEstilistas de ejemplo:');
+		console.log('\nEstilista de ejemplo:');
 		seededStylists.forEach(({ stylist, result }) => {
 			console.log(`\n[${stylist.label}]`);
 			console.log(`- Email: ${stylist.email}`);
@@ -483,7 +462,7 @@ async function main() {
 			console.log(`- Estado: ${stylist.status}`);
 			console.log(`- Categoría: ${stylist.category}`);
 			console.log(`- User ID: ${result.appUser.id}`);
-			console.log(`- Supabase Auth ID: ${result.supabaseUserId}`);
+			console.log(`- Supabase Auth ID: ${result.supabaseAuthId}`);
 			console.log(`- Landing pública: ${FRONTEND_URL}/${stylist.slug}`);
 		});
 

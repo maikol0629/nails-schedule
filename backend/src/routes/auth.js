@@ -14,51 +14,23 @@ function handleValidation(req, res, next) {
   return next();
 }
 
-// Registro de estilista
+// Completar perfil de estilista después de OTP (passwordless)
 router.post(
-  '/register-stylist',
+  '/complete-profile',
+  authMiddleware,
   [
-    body('email').isEmail().withMessage('Email inválido'),
-    body('password')
-      .isLength({ min: 8 })
-      .withMessage('La contraseña debe tener al menos 8 caracteres'),
     body('businessName').notEmpty().withMessage('businessName es requerido'),
     body('ownerName').notEmpty().withMessage('ownerName es requerido'),
     body('category').notEmpty().withMessage('category es requerido'),
-    body('phone').optional().isString(),
-    body('whatsapp').optional().isString(),
+    body('phone').notEmpty().withMessage('phone es requerido'),
+    body('whatsapp').notEmpty().withMessage('whatsapp es requerido'),
   ],
   handleValidation,
-  authController.registerStylist,
+  authController.completeStylistProfile,
 );
 
-// Verificación de email
-router.get('/verify-email/:token', authController.verifyEmail);
-
-// Verificación de WhatsApp
-router.post(
-  '/verify-whatsapp',
-  [
-    body('userId').notEmpty().withMessage('userId es requerido'),
-    body('code')
-      .notEmpty()
-      .withMessage('code es requerido')
-      .isLength({ min: 6, max: 6 })
-      .withMessage('El código debe tener 6 dígitos')
-      .isNumeric()
-      .withMessage('El código debe ser numérico'),
-  ],
-  handleValidation,
-  authController.verifyWhatsApp,
-);
-
-// Estado de registro
-router.get(
-  '/registration-status/:userId',
-  [param('userId').notEmpty().withMessage('userId es requerido')],
-  handleValidation,
-  authController.getRegistrationStatus,
-);
+// Verificar disponibilidad de email de forma pública (sin autenticación)
+router.get('/check-email', authController.checkEmailAvailability);
 
 // Devuelve información básica del usuario autenticado (incluye rol y estado de cuenta)
 router.get('/me', authMiddleware, (req, res) => {

@@ -264,11 +264,13 @@ async function getStylistInfo(req, res) {
 			businessName: profile.businessName,
 			ownerName: profile.ownerName,
 			category: profile.category,
+			bio: profile.bio,
 			city: profile.city,
 			country: profile.country,
 			primaryColor: profile.primaryColor,
 			logoUrl: profile.logoUrl,
 			coverImageUrl: profile.coverImageUrl,
+			photoUrl: profile.photoUrl,
 			instagram: profile.instagram,
 			status: user.status,
 		});

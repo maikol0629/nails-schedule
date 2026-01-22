@@ -15,12 +15,11 @@ model User {
   supabaseAuthId String         @unique
   role           UserRole       @default(STYLIST)
   status         AccountStatus  @default(PENDING_VERIFICATION)
-  emailVerifiedAt DateTime?
+  isVerifiedAt   DateTime?
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt
 
   stylistProfile     StylistProfile?
-  verificationTokens VerificationToken[]
 }
 
 // --- Domain models scoped por supabaseUserId (tenant) ---
@@ -117,7 +116,7 @@ model StylistProfile {
   email             String?
   emailVerified     Boolean          @default(false)
   whatsappVerified  Boolean          @default(false)
-  emailVerifiedAt   DateTime?
+  isVerifiedAt      DateTime?
   whatsappVerifiedAt DateTime?
   approvedBy        String?
   approvedAt        DateTime?
@@ -168,22 +167,6 @@ model BlockedDay {
 
 // --- Verification & audit ---
 
-model VerificationToken {
-  id        String                @id @default(cuid())
-  userId    String
-  token     String                @unique
-  type      VerificationTokenType
-  expiresAt DateTime
-  usedAt    DateTime?
-  createdAt DateTime              @default(now())
-
-  user      User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId])
-  @@index([type])
-  @@index([expiresAt])
-}
-
 model AuditLog {
   id           String   @id @default(cuid())
   adminId      String
@@ -232,10 +215,4 @@ enum AccountStatus {
   ACTIVE
   SUSPENDED
   DEACTIVATED
-}
-
-enum VerificationTokenType {
-  EMAIL_VERIFICATION
-  WHATSAPP_VERIFICATION
-  PASSWORD_RESET
 }

@@ -29,6 +29,11 @@ export default function ProfilePage() {
   const [instagram, setInstagram] = useState('');
   const [address, setAddress] = useState('');
   const [photoUrl, setPhotoUrl] = useState('');
+  const [city, setCity] = useState('');
+  const [country, setCountry] = useState('');
+  const [slug, setSlug] = useState('');
+  const [businessName, setBusinessName] = useState('');
+  const [ownerName, setOwnerName] = useState('');
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -52,6 +57,12 @@ export default function ProfilePage() {
         setInstagram(data.instagram || '');
         setAddress(data.address || '');
         setPhotoUrl(data.photoUrl || '');
+        setCity(data.city || '');
+        setCountry(data.country || '');
+        // Guardar slug real del perfil si existe para usarlo en la vista pública
+        setSlug(data.slug || '');
+        setBusinessName(data.businessName || '');
+        setOwnerName(data.ownerName || '');
       } catch (error) {
         console.error('Error cargando perfil:', error);
         toast.error('No se pudo cargar tu perfil.');
@@ -109,6 +120,8 @@ export default function ProfilePage() {
         instagram: instagram.trim() || null,
         address: address.trim() || null,
         photoUrl: photoUrl || null,
+        city: city.trim() || null,
+        country: country.trim() || null,
       };
 
       const saved = await updateProfile(payload);
@@ -120,6 +133,9 @@ export default function ProfilePage() {
       setInstagram(saved.instagram || '');
       setAddress(saved.address || '');
       setPhotoUrl(saved.photoUrl || '');
+      setCity(saved.city || '');
+      setCountry(saved.country || '');
+      setSlug(saved.slug || slug || '');
 
       toast.success('Perfil actualizado correctamente.');
     } catch (error) {
@@ -161,8 +177,9 @@ export default function ProfilePage() {
   };
 
   const handlePreviewClick = () => {
-    let path = name.trim().toLowerCase().replace(/\s+/g, '-');
-    console.log(path);
+    // Usar el slug real si está disponible; si no, derivarlo del nombre como fallback
+    const fallback = name.trim().toLowerCase().replace(/\s+/g, '-');
+    const path = slug || fallback;
     window.open(`/${path}`, '_blank', 'noopener,noreferrer');
   };
 
@@ -170,6 +187,14 @@ export default function ProfilePage() {
   const instagramDisplay = instagram?.trim() || '';
 
   const bioLength = bio.length;
+
+  const previewTitle = businessName || ownerName || displayName;
+  const previewLocation = city || country
+	? `${city || ''}${city && country ? ', ' : ''}${country || ''}`
+	: '';
+  const previewHeroBodyText = bio.trim()
+	? `${bio.slice(0, 120)}${bio.length > 120 ? '…' : ''}`
+	: 'Reserva tu cita y vive una experiencia única de belleza y cuidado personal.';
 
   return (
     <div className="p-6 space-y-6">
@@ -393,6 +418,32 @@ export default function ProfilePage() {
                   </div>
                 </label>
               </div>
+
+          <div>
+            <label className="block text-sm font-medium text-slate-800">
+              Ciudad
+              <input
+                type="text"
+                value={city}
+                onChange={(e) => setCity(e.target.value)}
+                className="mt-1 block w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 placeholder-slate-400"
+                placeholder="Ej: Medellín"
+              />
+            </label>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-slate-800">
+              País
+              <input
+                type="text"
+                value={country}
+                onChange={(e) => setCountry(e.target.value)}
+                className="mt-1 block w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 placeholder-slate-400"
+                placeholder="Ej: Colombia"
+              />
+            </label>
+          </div>
             </div>
           </form>
 
@@ -420,13 +471,15 @@ export default function ProfilePage() {
                 )}
               </div>
               <div className="flex-1 space-y-1">
-                <h2 className="text-base font-semibold text-slate-900">{displayName}</h2>
-                <p className="text-xs font-medium uppercase tracking-wide text-pink-500">
-                  Nails &amp; Beauty
-                </p>
+                <h2 className="text-base font-semibold text-slate-900">{previewTitle}</h2>
+                {previewLocation && (
+				<p className="text-xs font-medium text-pink-500 flex items-center gap-1">
+				  <MapPin className="h-3 w-3" />
+				  <span>{previewLocation}</span>
+				</p>
+			  )}
                 <p className="mt-1 text-sm text-slate-600 line-clamp-3">
-                  {bio.trim()
-                    || 'Especialista en uñas y belleza, cuidando cada detalle de tu estilo.'}
+                  {previewHeroBodyText}
                 </p>
               </div>
             </div>

@@ -35,6 +35,18 @@ function classNames(...classes) {
   return classes.filter(Boolean).join(' ');
 }
 
+function getDefaultCoverImage(category) {
+  const normalized = (category || 'NAIL_SPA').toUpperCase();
+  switch (normalized) {
+    case 'BARBERSHOP':
+      return 'https://images.pexels.com/photos/3998429/pexels-photo-3998429.jpeg?auto=compress&cs=tinysrgb&w=800';
+    case 'HAIR_SALON':
+      return 'https://images.pexels.com/photos/3993447/pexels-photo-3993447.jpeg?auto=compress&cs=tinysrgb&w=800';
+    default:
+      return 'https://images.pexels.com/photos/3997379/pexels-photo-3997379.jpeg?auto=compress&cs=tinysrgb&w=800';
+  }
+}
+
 export default function DynamicLanding() {
   const { slug } = useParams();
 
@@ -77,6 +89,8 @@ export default function DynamicLanding() {
     if (!stylistInfo) return getThemeByCategory('NAIL_SPA');
     return getThemeByCategory(stylistInfo.category);
   }, [stylistInfo]);
+
+  const primaryColor = stylistInfo?.primaryColor || theme.colors.primary;
 
   useEffect(() => {
     if (!slug) return;
@@ -215,14 +229,32 @@ export default function DynamicLanding() {
     setConfirmation(null);
   };
 
-  const stylistTitle = stylistInfo?.businessName || 'Tu estilista de confianza';
-  const stylistSubtitle = stylistInfo?.city
-    ? `${stylistInfo.city}${stylistInfo.country ? `, ${stylistInfo.country}` : ''}`
-    : 'Especialista en belleza, cuidando cada detalle de tu estilo.';
+  // Hero text logic
+  const stylistTitle = stylistInfo?.businessName
+	? stylistInfo.businessName
+	: (stylistInfo?.ownerName || 'Tu estilista de confianza');
+
+  const stylistLocation =
+	stylistInfo?.city || stylistInfo?.country
+	  ? `${stylistInfo.city || ''}${stylistInfo.city && stylistInfo.country ? ', ' : ''}${
+		      stylistInfo.country || ''
+	      }`
+	  : '';
+
+  const heroBodyText = stylistInfo?.bio?.trim()
+	? `${stylistInfo.bio.slice(0, 120)}${
+		    stylistInfo.bio.length > 120 ? '…' : ''
+	    }`
+	: 'Reserva tu cita y vive una experiencia única de belleza y cuidado personal.';
+
+  const coverImageUrl = stylistInfo?.coverImageUrl || getDefaultCoverImage(stylistInfo?.category);
 
   if (!slug) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-pink-50 to-purple-50">
+      <div
+        className="min-h-screen flex items-center justify-center"
+        style={{ background: theme.colors.background }}
+      >
         <p className="text-gray-600 text-center px-4">
           No se encontró la página solicitada.
         </p>
@@ -232,58 +264,110 @@ export default function DynamicLanding() {
 
   if (loadingStylist) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-pink-50 to-purple-50">
-        <Loader2 className="w-8 h-8 animate-spin text-pink-500" />
+      <div
+        className="min-h-screen flex items-center justify-center"
+        style={{ background: theme.colors.background }}
+      >
+        <Loader2
+          className="w-8 h-8 animate-spin"
+          style={{ color: primaryColor }}
+        />
       </div>
     );
   }
 
   if (stylistError) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-pink-50 to-purple-50">
+      <div
+        className="min-h-screen flex items-center justify-center"
+        style={{ background: theme.colors.background }}
+      >
         <p className="text-gray-600 text-center px-4">{stylistError}</p>
       </div>
     );
   }
 
-  const primaryColor = stylistInfo?.primaryColor || theme.colors.primary;
+  
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-pink-50 via-white to-purple-50 text-gray-900">
+    <div
+      className="min-h-screen text-gray-900"
+      style={{ background: theme.colors.background }}
+    >
       {/* Header / Navbar */}
-      <header className="sticky top-0 z-30 bg-white/80 backdrop-blur border-b border-pink-100">
+      <header
+        className="sticky top-0 z-30 bg-white/80 backdrop-blur border-b"
+        style={{ borderColor: theme.cardStyle.borderColor }}
+      >
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between h-16">
           <div className="flex items-center gap-2">
-            <div
-              className="w-9 h-9 rounded-full flex items-center justify-center shadow-md"
-              style={{
-                backgroundImage: `linear-gradient(to top right, ${primaryColor}, ${theme.colors.accent})`,
-              }}
-            >
-              <span className="text-white font-semibold text-lg">NS</span>
-            </div>
+            {stylistInfo?.photoUrl ? (
+              <img
+                src={stylistInfo.photoUrl}
+                alt={stylistInfo?.ownerName || stylistTitle}
+                className="w-9 h-9 rounded-full object-cover shadow-md border"
+                style={{ borderColor: theme.cardStyle.borderColor }}
+              />
+            ) : (
+              <div
+                className="w-9 h-9 rounded-full flex items-center justify-center shadow-md"
+                style={{ backgroundImage: theme.gradient.hero }}
+              >
+                <span className="text-white font-semibold text-lg">NS</span>
+              </div>
+            )}
             <div className="flex flex-col">
               <span className="font-semibold text-sm sm:text-base text-gray-900">
                 {stylistTitle}
               </span>
-              <span className="text-xs text-pink-500">{stylistInfo?.ownerName || 'Estilista'}</span>
+              <span
+                className="text-xs"
+                style={{ color: theme.colors.accent }}
+              >
+                {stylistInfo?.ownerName || 'Estilista'}
+              </span>
             </div>
           </div>
 
           <nav className="hidden md:flex items-center gap-6 text-sm font-medium">
-            <a href="#services" className="hover:text-pink-500 transition-colors">
+            <a
+              href="#services"
+              className="transition-colors"
+              style={{ color: theme.colors.text }}
+              onMouseOver={(e) => { e.currentTarget.style.color = theme.colors.accent; }}
+              onFocus={(e) => { e.currentTarget.style.color = theme.colors.accent; }}
+              onMouseOut={(e) => { e.currentTarget.style.color = theme.colors.text; }}
+              onBlur={(e) => { e.currentTarget.style.color = theme.colors.text; }}
+            >
               Servicios
             </a>
-            <a href="#portfolio" className="hover:text-pink-500 transition-colors">
+            <a
+              href="#portfolio"
+              className="transition-colors"
+              style={{ color: theme.colors.text }}
+              onMouseOver={(e) => { e.currentTarget.style.color = theme.colors.accent; }}
+              onFocus={(e) => { e.currentTarget.style.color = theme.colors.accent; }}
+              onMouseOut={(e) => { e.currentTarget.style.color = theme.colors.text; }}
+              onBlur={(e) => { e.currentTarget.style.color = theme.colors.text; }}
+            >
               Portafolio
             </a>
-            <a href="#contact" className="hover:text-pink-500 transition-colors">
+            <a
+              href="#contact"
+              className="transition-colors"
+              style={{ color: theme.colors.text }}
+              onMouseOver={(e) => { e.currentTarget.style.color = theme.colors.accent; }}
+              onFocus={(e) => { e.currentTarget.style.color = theme.colors.accent; }}
+              onMouseOut={(e) => { e.currentTarget.style.color = theme.colors.text; }}
+              onBlur={(e) => { e.currentTarget.style.color = theme.colors.text; }}
+            >
               Contacto
             </a>
             <button
               type="button"
               onClick={() => handleOpenReservation(null)}
-              className="inline-flex items-center gap-1 rounded-full bg-gradient-to-r from-pink-500 to-purple-500 px-4 py-2 text-sm font-semibold text-white shadow-md hover:shadow-lg transition-all"
+              className="inline-flex items-center gap-1 rounded-full px-4 py-2 text-sm font-semibold text-white shadow-md hover:shadow-lg transition-all"
+              style={{ backgroundImage: theme.gradient.button, color: theme.buttonText.primary }}
            >
               Agendar
               <ArrowRight className="w-4 h-4" />
@@ -296,25 +380,40 @@ export default function DynamicLanding() {
         {/* Hero Section */}
         <section className="py-10 sm:py-14 grid md:grid-cols-2 gap-10 items-center">
           <div className="order-2 md:order-1 space-y-6">
-            <div className="inline-flex items-center gap-2 rounded-full bg-pink-50 px-3 py-1 text-xs font-medium text-pink-600 border border-pink-100">
-              <span className="w-1.5 h-1.5 rounded-full bg-pink-500" />
+            <div
+              className="inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-medium border"
+              style={{
+                backgroundColor: theme.colors.background,
+                borderColor: theme.cardStyle.borderColor,
+                color: theme.colors.text,
+              }}
+            >
+              <span
+                className="w-1.5 h-1.5 rounded-full"
+                style={{ backgroundColor: primaryColor }}
+              />
               Agenda tu cita en línea
             </div>
             <h1 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight text-gray-900">
               {stylistTitle}
-              <span className="block text-transparent bg-clip-text bg-gradient-to-r from-pink-500 to-purple-500">
-                {stylistSubtitle}
-              </span>
+              {stylistLocation && (
+          <span
+            className="block text-transparent bg-clip-text"
+            style={{ backgroundImage: theme.gradient.hero }}
+          >
+            {stylistLocation}
+          </span>
+        )}
             </h1>
             <p className="text-sm sm:text-base text-gray-600 max-w-xl">
-              Reserva en línea con {stylistInfo?.ownerName || 'tu estilista'},
-              eligiendo el servicio y horario perfecto para ti.
-            </p>
+        {heroBodyText}
+      </p>
             <div className="flex flex-wrap items-center gap-4">
               <button
                 type="button"
                 onClick={() => handleOpenReservation(null)}
-                className="inline-flex items-center justify-center gap-2 rounded-full bg-gradient-to-r from-pink-500 to-purple-500 px-6 py-3 text-sm sm:text-base font-semibold text-white shadow-lg hover:shadow-xl transition-all"
+                className="inline-flex items-center justify-center gap-2 rounded-full px-6 py-3 text-sm sm:text-base font-semibold text-white shadow-lg hover:shadow-xl transition-all"
+                style={{ backgroundImage: theme.gradient.button, color: theme.buttonText.primary }}
               >
                 <Calendar className="w-4 h-4" />
                 Agendar Cita
@@ -328,17 +427,15 @@ export default function DynamicLanding() {
 
           <div className="order-1 md:order-2 flex justify-center">
             <div className="relative w-64 h-64 sm:w-72 sm:h-72 md:w-80 md:h-80">
-              <div className="absolute inset-0 rounded-3xl" style={{
-                backgroundImage: `linear-gradient(to top right, ${primaryColor}, ${theme.colors.accent})`,
-              }}
-              />
+              <div
+		        className="absolute inset-0 rounded-3xl"
+		        style={{ backgroundImage: theme.gradient.hero }}
+		      />
               <div className="absolute -inset-3 rounded-[2.2rem] bg-gradient-to-tr from-white/40 to-white/10 backdrop-blur-sm" />
               <div
                 className="relative w-full h-full rounded-3xl overflow-hidden border border-white/40 shadow-xl bg-cover bg-center"
                 style={{
-                  backgroundImage: stylistInfo?.coverImageUrl
-                    ? `url(${stylistInfo.coverImageUrl})`
-                    : "url('https://images.pexels.com/photos/3997379/pexels-photo-3997379.jpeg?auto=compress&cs=tinysrgb&w=800')",
+                  backgroundImage: `url(${coverImageUrl})`,
                 }}
               />
             </div>
@@ -358,7 +455,10 @@ export default function DynamicLanding() {
 
           {loadingServices ? (
             <div className="flex items-center justify-center py-10">
-              <Loader2 className="w-6 h-6 animate-spin text-pink-500" />
+              <Loader2
+                className="w-6 h-6 animate-spin"
+                style={{ color: primaryColor }}
+              />
             </div>
           ) : services.length === 0 ? (
             <p className="text-gray-500 text-sm">Aún no hay servicios disponibles.</p>
@@ -367,9 +467,18 @@ export default function DynamicLanding() {
               {services.map((service) => (
                 <article
                   key={service.id}
-                  className="group rounded-2xl bg-white/90 border border-pink-50 shadow-sm hover:shadow-lg transition-all overflow-hidden flex flex-col"
+                  className="group bg-white/90 transition-all overflow-hidden flex flex-col"
+                  style={{
+                    borderRadius: theme.cardStyle.borderRadius,
+                    borderColor: theme.cardStyle.borderColor,
+                    borderWidth: 1,
+                    boxShadow: theme.cardStyle.shadow,
+                  }}
                 >
-                  <div className="h-32 bg-gradient-to-br from-pink-100 to-purple-100 relative overflow-hidden">
+                  <div
+                    className="h-32 relative overflow-hidden"
+                    style={{ backgroundImage: theme.gradient.hero, opacity: 0.9 }}
+                  >
                     <div className="absolute inset-0 bg-[radial-gradient(circle_at_0_0,_rgba(244,114,182,0.4),_transparent_60%),_radial-gradient(circle_at_100%_100%,_rgba(167,139,250,0.4),_transparent_55%)]" />
                   </div>
                   <div className="flex-1 p-4 space-y-3">
@@ -383,10 +492,16 @@ export default function DynamicLanding() {
                     )}
                     <div className="flex items-center justify-between text-xs sm:text-sm mt-2">
                       <div className="flex items-center gap-1.5 text-gray-500">
-                        <Clock className="w-4 h-4 text-pink-500" />
+                        <Clock
+                          className="w-4 h-4"
+                          style={{ color: primaryColor }}
+                        />
                         <span>{service.durationMinutes} min</span>
                       </div>
-                      <span className="font-semibold text-pink-600">
+                      <span
+                        className="font-semibold"
+                        style={{ color: primaryColor }}
+                      >
                         {formatPriceCOP(service.price)}
                       </span>
                     </div>
@@ -395,7 +510,8 @@ export default function DynamicLanding() {
                     <button
                       type="button"
                       onClick={() => handleOpenReservation(service.id)}
-                      className="w-full inline-flex items-center justify-center gap-2 rounded-full bg-pink-500 px-4 py-2 text-xs sm:text-sm font-semibold text-white shadow-sm hover:bg-pink-600 hover:shadow-md transition-all"
+                      className="w-full inline-flex items-center justify-center gap-2 rounded-full px-4 py-2 text-xs sm:text-sm font-semibold text-white shadow-sm hover:shadow-md transition-all"
+                      style={{ backgroundImage: theme.gradient.button, color: theme.buttonText.primary }}
                     >
                       Agendar
                       <ArrowRight className="w-4 h-4" />
@@ -420,7 +536,10 @@ export default function DynamicLanding() {
 
           {loadingPortfolio ? (
             <div className="flex items-center justify-center py-10">
-              <Loader2 className="w-6 h-6 animate-spin text-pink-500" />
+              <Loader2
+                className="w-6 h-6 animate-spin"
+                style={{ color: primaryColor }}
+              />
             </div>
           ) : portfolio.length === 0 ? (
             <p className="text-gray-500 text-sm">Aún no hay fotos en el portafolio.</p>
@@ -455,7 +574,11 @@ export default function DynamicLanding() {
         </section>
 
         {/* Contacto */}
-        <section id="contact" className="py-8 sm:py-10 border-t border-pink-100 mt-8">
+        <section
+          id="contact"
+          className="py-8 sm:py-10 border-t mt-8"
+          style={{ borderColor: theme.cardStyle.borderColor }}
+        >
           <div className="grid md:grid-cols-2 gap-8">
             <div className="space-y-4">
               <h2 className="text-xl sm:text-2xl font-bold text-gray-900">Contacto</h2>
@@ -467,7 +590,10 @@ export default function DynamicLanding() {
               <div className="space-y-3 text-sm sm:text-base">
                 {stylistInfo?.city && (
                   <div className="flex items-start gap-3 text-gray-700">
-                    <MapPin className="w-4 h-4 mt-0.5 text-pink-500" />
+                    <MapPin
+                      className="w-4 h-4 mt-0.5"
+                      style={{ color: primaryColor }}
+                    />
                     <span>
                       {stylistInfo.city}
                       {stylistInfo.country ? `, ${stylistInfo.country}` : ''}
@@ -479,7 +605,12 @@ export default function DynamicLanding() {
                     href={`https://instagram.com/${stylistInfo.instagram.replace('@', '')}`}
                     target="_blank"
                     rel="noreferrer"
-                    className="flex items-center gap-3 text-gray-700 hover:text-pink-500 transition-colors"
+                    className="flex items-center gap-3 text-gray-700 transition-colors"
+                    style={{ color: theme.colors.text }}
+                    onMouseOver={(e) => { e.currentTarget.style.color = theme.colors.accent; }}
+                    onFocus={(e) => { e.currentTarget.style.color = theme.colors.accent; }}
+                    onMouseOut={(e) => { e.currentTarget.style.color = theme.colors.text; }}
+                    onBlur={(e) => { e.currentTarget.style.color = theme.colors.text; }}
                   >
                     <Instagram className="w-4 h-4" />
                     <span>{stylistInfo.instagram}</span>
@@ -489,10 +620,21 @@ export default function DynamicLanding() {
             </div>
 
             {/* Resumen + CTA */}
-            <div className="bg-white/90 rounded-2xl border border-pink-100 shadow-sm p-4 sm:p-5 flex flex-col justify-between">
+            <div
+              className="bg-white/90 p-4 sm:p-5 flex flex-col justify-between"
+              style={{
+                borderRadius: theme.cardStyle.borderRadius,
+                borderColor: theme.cardStyle.borderColor,
+                borderWidth: 1,
+                boxShadow: theme.cardStyle.shadow,
+              }}
+            >
               <div className="space-y-3">
                 <h3 className="text-base sm:text-lg font-semibold text-gray-900 flex items-center gap-2">
-                  <CheckCircle2 className="w-5 h-5 text-pink-500" />
+                  <CheckCircle2
+                    className="w-5 h-5"
+                    style={{ color: primaryColor }}
+                  />
                   ¿Lista para tu próxima cita?
                 </h3>
                 <p className="text-xs sm:text-sm text-gray-600">
@@ -503,7 +645,8 @@ export default function DynamicLanding() {
               <button
                 type="button"
                 onClick={() => handleOpenReservation(null)}
-                className="mt-4 inline-flex items-center justify-center gap-2 rounded-full bg-gradient-to-r from-pink-500 to-purple-500 px-5 py-2.5 text-sm sm:text-base font-semibold text-white shadow-md hover:shadow-lg transition-all"
+                className="mt-4 inline-flex items-center justify-center gap-2 rounded-full px-5 py-2.5 text-sm sm:text-base font-semibold text-white shadow-md hover:shadow-lg transition-all"
+                style={{ backgroundImage: theme.gradient.button, color: theme.buttonText.primary }}
               >
                 <Calendar className="w-4 h-4" />
                 Agendar ahora
@@ -536,7 +679,8 @@ export default function DynamicLanding() {
                 <select
                   value={selectedServiceId || ''}
                   onChange={(e) => setSelectedServiceId(e.target.value || null)}
-                  className="block w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm shadow-sm focus:border-pink-500 focus:ring-pink-500"
+                  className="block w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm shadow-sm"
+                  style={{ outlineColor: primaryColor }}
                   required
                 >
                   <option value="">Selecciona un servicio</option>
@@ -555,7 +699,8 @@ export default function DynamicLanding() {
                   </label>
                   <input
                     type="date"
-                    className="block w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm shadow-sm focus:border-pink-500 focus:ring-pink-500"
+                    className="block w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm shadow-sm"
+                    style={{ outlineColor: primaryColor }}
                     value={selectedDate}
                     onChange={(e) => setSelectedDate(e.target.value)}
                     min={todayStr}
@@ -571,7 +716,8 @@ export default function DynamicLanding() {
                     <select
                       value={selectedTime}
                       onChange={(e) => setSelectedTime(e.target.value)}
-                      className="block w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm shadow-sm focus:border-pink-500 focus:ring-pink-500"
+                      className="block w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm shadow-sm"
+                      style={{ outlineColor: primaryColor }}
                       required
                     >
                       <option value="">
@@ -584,7 +730,10 @@ export default function DynamicLanding() {
                       ))}
                     </select>
                     {loadingSlots && (
-                      <Loader2 className="w-4 h-4 animate-spin text-pink-500 absolute right-2 top-2.5" />
+                      <Loader2
+                        className="w-4 h-4 animate-spin absolute right-2 top-2.5"
+                        style={{ color: primaryColor }}
+                      />
                     )}
                   </div>
                 </div>
@@ -596,7 +745,8 @@ export default function DynamicLanding() {
                 </label>
                 <input
                   type="text"
-                  className="block w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm shadow-sm focus:border-pink-500 focus:ring-pink-500"
+                  className="block w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm shadow-sm"
+                  style={{ outlineColor: primaryColor }}
                   value={clientName}
                   onChange={(e) => setClientName(e.target.value)}
                   required
@@ -610,7 +760,8 @@ export default function DynamicLanding() {
                   </label>
                   <input
                     type="tel"
-                    className="block w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm shadow-sm focus:border-pink-500 focus:ring-pink-500"
+                    className="block w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm shadow-sm"
+                    style={{ outlineColor: primaryColor }}
                     value={clientPhone}
                     onChange={(e) => setClientPhone(e.target.value)}
                     required
@@ -622,7 +773,8 @@ export default function DynamicLanding() {
                   </label>
                   <input
                     type="email"
-                    className="block w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm shadow-sm focus:border-pink-500 focus:ring-pink-500"
+                    className="block w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm shadow-sm"
+                    style={{ outlineColor: primaryColor }}
                     value={clientEmail}
                     onChange={(e) => setClientEmail(e.target.value)}
                   />
@@ -634,7 +786,8 @@ export default function DynamicLanding() {
                   Notas (opcional)
                 </label>
                 <textarea
-                  className="block w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm shadow-sm focus:border-pink-500 focus:ring-pink-500"
+                  className="block w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm shadow-sm"
+                  style={{ outlineColor: primaryColor }}
                   rows={3}
                   value={clientNotes}
                   onChange={(e) => setClientNotes(e.target.value)}
@@ -659,10 +812,13 @@ export default function DynamicLanding() {
                 disabled={submitting}
                 className={classNames(
                   'w-full inline-flex items-center justify-center gap-2 rounded-full px-5 py-2.5 text-sm sm:text-base font-semibold text-white shadow-md transition-all',
-                  submitting
-                    ? 'bg-gray-400 cursor-not-allowed'
-                    : 'bg-gradient-to-r from-pink-500 to-purple-500 hover:shadow-lg',
+                  submitting ? 'bg-gray-400 cursor-not-allowed' : '',
                 )}
+                style={
+                  submitting
+                    ? undefined
+                    : { backgroundImage: theme.gradient.button, color: theme.buttonText.primary }
+                }
               >
                 {submitting ? (
                   <>

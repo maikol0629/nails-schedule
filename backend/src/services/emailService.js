@@ -2,6 +2,7 @@ const { Resend } = require('resend');
 
 const resendApiKey = process.env.RESEND_API_KEY;
 const frontendUrl = process.env.FRONTEND_URL;
+const emailFrom = process.env.EMAIL_FROM;
 
 if (!resendApiKey) {
   console.warn('[emailService] RESEND_API_KEY no está configurada');
@@ -17,35 +18,6 @@ function buildUrl(path) {
   if (!frontendUrl) return '#';
   const base = frontendUrl.replace(/\/$/, '');
   return `${base}${path.startsWith('/') ? path : `/${path}`}`;
-}
-
-async function sendVerificationEmail(email, token, businessName) {
-  if (!resend) {
-    throw new Error('Servicio de email no configurado: falta RESEND_API_KEY');
-  }
-
-  try {
-    const verifyUrl = buildUrl(`/verify-email?token=${encodeURIComponent(token)}`);
-
-    const subject = 'Verifica tu correo para activar tu cuenta';
-    const html = `
-      <p>Hola${businessName ? `, ${businessName}` : ''} 👋</p>
-      <p>Gracias por registrarte en tu agenda de citas.</p>
-      <p>Por favor, haz clic en el siguiente enlace para verificar tu correo:</p>
-      <p><a href="${verifyUrl}">Verificar correo</a></p>
-      <p>Si no solicitaste este registro, puedes ignorar este mensaje.</p>
-    `;
-
-    await resend.emails.send({
-      from: 'noreply@nails-schedule.app',
-      to: email,
-      subject,
-      html,
-    });
-  } catch (error) {
-    console.error('[emailService] Error enviando email de verificación', error);
-    throw new Error('No se pudo enviar el email de verificación');
-  }
 }
 
 async function sendApprovalEmail(email, businessName, slug) {
@@ -65,7 +37,7 @@ async function sendApprovalEmail(email, businessName, slug) {
     `;
 
     await resend.emails.send({
-      from: 'noreply@nails-schedule.app',
+      from: emailFrom,
       to: email,
       subject,
       html,
@@ -91,7 +63,7 @@ async function sendRejectionEmail(email, businessName, reason) {
     `;
 
     await resend.emails.send({
-      from: 'noreply@nails-schedule.app',
+      from: emailFrom,
       to: email,
       subject,
       html,
@@ -103,7 +75,6 @@ async function sendRejectionEmail(email, businessName, reason) {
 }
 
 module.exports = {
-  sendVerificationEmail,
   sendApprovalEmail,
   sendRejectionEmail,
 };

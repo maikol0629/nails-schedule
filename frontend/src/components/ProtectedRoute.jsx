@@ -9,6 +9,7 @@ export default function ProtectedRoute({ children, requiredRole }) {
 	const [checking, setChecking] = useState(true);
 	const [appUser, setAppUser] = useState(null);
 	const [error, setError] = useState(null);
+	const [authErrorCode, setAuthErrorCode] = useState(null);
 
 	useEffect(() => {
 		let cancelled = false;
@@ -25,10 +26,21 @@ export default function ProtectedRoute({ children, requiredRole }) {
 					setAppUser(response.data);
 				}
 			} catch (err) {
-				// eslint-disable-next-line no-console
-				console.error('Error fetching /api/auth/me', err);
 				if (!cancelled) {
-					setError('No se pudo validar tu sesión');
+					const status = err?.response?.status;
+					const code = err?.response?.data?.code;
+					// Para 401/403, no logeamos en consola para evitar ruido: solo
+					// manejamos los códigos esperados.
+					if (status === 403 && code) {
+						setAuthErrorCode(code);
+					} else if (status === 401) {
+						// Sesión inválida/expirada: delegamos al flujo de login sin error global.
+						setError(null);
+					} else {
+						// eslint-disable-next-line no-console
+						console.error('Error fetching /api/auth/me', err);
+						setError('No se pudo validar tu sesión');
+					}
 				}
 			} finally {
 				if (!cancelled) {
@@ -59,6 +71,19 @@ export default function ProtectedRoute({ children, requiredRole }) {
 		return <Navigate to={loginPath} replace />;
 	}
 
+	// Usuario autenticado en Supabase pero sin registro en la tabla Users:
+	// lo redirigimos al flujo de registro para que complete sus datos.
+	if (authErrorCode === 'USER_NOT_REGISTERED') {
+		const target = isSuperAdminPath ? '/super-admin/login' : '/admin/register?resume=1';
+		return <Navigate to={target} replace />;
+	}
+
+	// Usuario con registro en Users pero con estado distinto de ACTIVE:
+	// lo llevamos a una página informativa de cuenta inactiva.
+	if (authErrorCode === 'ACCOUNT_INACTIVE') {
+		return <Navigate to="/account-inactive" replace />;
+	}
+
 	if (error) {
 		return (
 			<div className="min-h-screen flex items-center justify-center bg-slate-50">
@@ -78,26 +103,7 @@ export default function ProtectedRoute({ children, requiredRole }) {
 	}
 
 	if (appUser.status && appUser.status !== 'ACTIVE') {
-		return (
-			<div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 gap-4">
-				<div className="text-slate-600 text-center text-sm">Cuenta inactiva</div>
-				<button
-					type="button"
-					onClick={async () => {
-						try {
-							await logout();
-							window.location.href = isSuperAdminPath ? '/super-admin/login' : '/admin/login';
-						} catch (e) {
-							// eslint-disable-next-line no-console
-							console.error('Error cerrando sesión:', e);
-						}
-					}}
-					className="inline-flex items-center justify-center rounded-lg bg-slate-900 px-4 py-2 text-xs font-medium text-white hover:bg-slate-800"
-				>
-					Cerrar sesión
-				</button>
-			</div>
-		);
+		return <Navigate to="/account-inactive" replace />;
 	}
 
 	if (requiredRole && appUser.role !== requiredRole) {

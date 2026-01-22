@@ -20,6 +20,9 @@ async function authMiddleware(req, res, next) {
       return res.status(401).json({ message: 'Invalid or expired token' });
     }
 
+    const isProfileCompletionRoute =
+      req.originalUrl && req.originalUrl.includes('/api/auth/complete-profile');
+
     // 1. Buscar el usuario de aplicación asociado al usuario de Supabase por supabaseAuthId
     let appUser = await prisma.user.findUnique({
       where: { supabaseAuthId: authUser.id },
@@ -51,8 +54,22 @@ async function authMiddleware(req, res, next) {
       });
     }
 
+    // 4. Si no existe usuario de aplicación y estamos en la ruta de completar perfil,
+    //    permitimos continuar solo con la información de Supabase para que el
+    //    controlador cree el registro en la tabla User.
+    if (!appUser && isProfileCompletionRoute) {
+      req.supabaseUser = authUser;
+      req.supabaseAuthId = authUser.id;
+      return next();
+    }
+
+    // 5. Para el resto de rutas, si no hay usuario de aplicación, consideramos que
+    //    la persona está autenticada en Supabase pero no ha completado su registro
+    //    en la base de datos de la app.
     if (!appUser) {
-      return res.status(403).json({ message: 'Cuenta inactiva' });
+      return res
+        .status(403)
+        .json({ code: 'USER_NOT_REGISTERED', message: 'Usuario sin registro de aplicación' });
     }
 
     // Si es SUPER_ADMIN pero no está marcado como ACTIVE, lo reactivamos
@@ -63,9 +80,12 @@ async function authMiddleware(req, res, next) {
       });
     }
 
-    // Validar que la cuenta esté activa
-    if (appUser.status !== AccountStatus.ACTIVE) {
-      return res.status(403).json({ message: 'Cuenta inactiva' });
+    // Validar que la cuenta esté activa (excepto al completar el perfil, donde
+    // podemos permitir estados como PENDING_APPROVAL)
+    if (!isProfileCompletionRoute && appUser.status !== AccountStatus.ACTIVE) {
+      return res
+        .status(403)
+        .json({ code: 'ACCOUNT_INACTIVE', message: 'Cuenta inactiva', status: appUser.status });
     }
 
     // Exponer datos útiles en la request

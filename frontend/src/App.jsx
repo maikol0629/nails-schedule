@@ -23,9 +23,7 @@ import PendingApprovals from './pages/super-admin/PendingApprovals.jsx';
 import StylistsList from './pages/super-admin/StylistsList.jsx';
 import AuditLogs from './pages/super-admin/AuditLogs.jsx';
 import StylistRegister from './pages/auth/StylistRegister.jsx';
-import VerifyEmail from './pages/auth/VerifyEmail.jsx';
-import VerifyWhatsApp from './pages/auth/VerifyWhatsApp.jsx';
-import VerifyEmailToken from './pages/auth/VerifyEmailToken.jsx';
+import AccountInactive from './pages/auth/AccountInactive.jsx';
 
 export default function App() {
   return (
@@ -34,52 +32,51 @@ export default function App() {
         <Toaster position="top-right" />
         <ErrorBoundary>
           <Routes>
-        {/* Rutas públicas */}
-        <Route path="/" element={<LandingPage />} />
-        <Route path="/:slug" element={<DynamicLanding />} />
-        <Route path="/verify-email/:token" element={<VerifyEmailToken />} />
+            {/* Rutas públicas */}
+            <Route path="/" element={<LandingPage />} />
+            <Route path="/:slug" element={<DynamicLanding />} />
+            <Route path="/account-inactive" element={<AccountInactive />} />
 
-        {/* Auth estilistas */}
-        <Route path="/admin/register" element={<StylistRegister />} />
-        <Route path="/admin/verify-email" element={<VerifyEmail />} />
-        <Route path="/admin/verify-whatsapp" element={<VerifyWhatsApp />} />
-        <Route path="/admin/login" element={<StylistLogin />} />
-        <Route path="/admin" element={<StylistLogin />} />
+            {/* Auth estilistas */}
+            <Route path="/admin/register" element={<StylistRegister />} />
+            {/* Flujo actual de login puede seguir usando la pantalla existente */}
+            <Route path="/admin/login" element={<StylistLogin />} />
+            <Route path="/admin" element={<StylistLogin />} />
 
-        {/* Auth super admin */}
-        <Route path="/super-admin/login" element={<SuperAdminLogin />} />
+            {/* Auth super admin */}
+            <Route path="/super-admin/login" element={<SuperAdminLogin />} />
 
-        {/* Super admin (requiere role SUPER_ADMIN) */}
-        <Route
-          path="/super-admin/dashboard"
-          element={(
-            <ProtectedRoute requiredRole="SUPER_ADMIN">
-              <SuperAdminLayout>
-                <SuperAdminDashboard />
-              </SuperAdminLayout>
-            </ProtectedRoute>
-          )}
-        />
-        <Route
-          path="/super-admin/pending-approvals"
-          element={(
-            <ProtectedRoute requiredRole="SUPER_ADMIN">
-              <SuperAdminLayout>
-                <PendingApprovals />
-              </SuperAdminLayout>
-            </ProtectedRoute>
-          )}
-        />
-        <Route
-          path="/super-admin/stylists"
-          element={(
-            <ProtectedRoute requiredRole="SUPER_ADMIN">
-              <SuperAdminLayout>
-                <StylistsList />
-              </SuperAdminLayout>
-            </ProtectedRoute>
-          )}
-        />
+            {/* Super admin (requiere role SUPER_ADMIN) */}
+            <Route
+              path="/super-admin/dashboard"
+              element={(
+                <ProtectedRoute requiredRole="SUPER_ADMIN">
+                  <SuperAdminLayout>
+                    <SuperAdminDashboard />
+                  </SuperAdminLayout>
+                </ProtectedRoute>
+              )}
+            />
+            <Route
+              path="/super-admin/pending-approvals"
+              element={(
+                <ProtectedRoute requiredRole="SUPER_ADMIN">
+                  <SuperAdminLayout>
+                    <PendingApprovals />
+                  </SuperAdminLayout>
+                </ProtectedRoute>
+              )}
+            />
+            <Route
+              path="/super-admin/stylists"
+              element={(
+                <ProtectedRoute requiredRole="SUPER_ADMIN">
+                  <SuperAdminLayout>
+                    <StylistsList />
+                  </SuperAdminLayout>
+                </ProtectedRoute>
+              )}
+            />
         <Route
           path="/super-admin/audit-logs"
           element={(

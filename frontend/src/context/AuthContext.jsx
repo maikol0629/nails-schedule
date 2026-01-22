@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState } from 'react';
 import { supabase } from '../config/supabase';
+import apiClient from '../services/apiConfig';
 
 const AuthContext = createContext(null);
 
@@ -18,7 +19,26 @@ export function AuthProvider({ children }) {
 
 				if (!isMounted) return;
 
-				setUser(session?.user ?? null);
+				if (!session?.user) {
+					setUser(null);
+					setLoading(false);
+					return;
+				}
+
+				// Validar que la cuenta asociada a la sesión esté ACTIVA
+				try {
+					await apiClient.get('/api/auth/me');
+					if (!isMounted) return;
+					setUser(session.user);
+				} catch (error) {
+					const status = error?.response?.status;
+					if (status === 401 || status === 403) {
+						await supabase.auth.signOut();
+					}
+					if (!isMounted) return;
+					setUser(null);
+				}
+
 				setLoading(false);
 			} catch (error) {
 				console.error('Error initializing auth:', error);
@@ -45,33 +65,29 @@ export function AuthProvider({ children }) {
 		};
 	}, []);
 
-	const login = async (email, password) => {
-		const { data, error } = await supabase.auth.signInWithPassword({
-			email,
-			password,
-		});
-
+	const loginWithPassword = async (email, password) => {
+		// 1. Iniciar sesión en Supabase
+		const { data, error } = await supabase.auth.signInWithPassword({ email, password });
 		if (error) {
 			throw error;
 		}
 
-		setUser(data.user ?? null);
-		return data;
-	};
-
-	const signup = async (email, password) => {
-		const { data, error } = await supabase.auth.signUp({
-			email,
-			password,
-		});
-
-		if (error) {
-			throw error;
+		// 2. Validar inmediatamente contra el backend que la cuenta esté ACTIVA
+		try {
+			const response = await apiClient.get('/api/auth/me');
+			// Devolvemos los datos del backend (incluye rol, status, email)
+			return response.data;
+		} catch (err) {
+			const status = err?.response?.status;
+			if (status === 401 || status === 403) {
+				await supabase.auth.signOut();
+				setUser(null);
+				throw new Error(
+					'Tu cuenta aún no está activa. Revisa tu correo o espera la aprobación.',
+				);
+			}
+			throw err;
 		}
-
-		// Dependiendo de la configuración de Supabase, puede requerir verificación de email
-		setUser(data.user ?? null);
-		return data;
 	};
 
 	const logout = async () => {
@@ -85,8 +101,7 @@ export function AuthProvider({ children }) {
 	const value = {
 		user,
 		loading,
-		login,
-		signup,
+		loginWithPassword,
 		logout,
 	};
 

@@ -1,5 +1,6 @@
 const { PrismaClient } = require('@prisma/client');
 const { addMinutes, isBefore, isAfter } = require('date-fns');
+const { generateUniqueSlug } = require('../utils/slugGenerator');
 
 const prisma = new PrismaClient();
 
@@ -176,20 +177,31 @@ async function updateProfile(req, res) {
 		instagram,
 		address,
 		photoUrl,
+		city,
+		country,
 	} = req.body || {};
 
 	try {
+		const safeName = (typeof name === 'string' && name.trim()) || 'Stylist';
+		const slug = await generateUniqueSlug(safeName);
+
 		const profile = await prisma.stylistProfile.upsert({
 			where: { userId: req.userId },
 			create: {
 				userId: req.userId,
-				name: name || 'Stylist',
+				businessName: safeName,
+				ownerName: safeName,
+				category: 'NAIL_SPA',
+				slug,
+				name: safeName,
 				bio: bio || null,
 				phone: phone || null,
 				email: email || null,
 				instagram: instagram || null,
 				address: address || null,
 				photoUrl: photoUrl || null,
+				city: city || null,
+				country: country || 'Colombia',
 			},
 			update: {
 				// Usamos nullish coalescing para permitir enviar null explícito si se desea borrar un campo.
@@ -200,6 +212,8 @@ async function updateProfile(req, res) {
 				instagram: instagram ?? undefined,
 				address: address ?? undefined,
 				photoUrl: photoUrl ?? undefined,
+				city: city ?? undefined,
+				country: country ?? undefined,
 			},
 		});
 
