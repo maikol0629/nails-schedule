@@ -74,7 +74,7 @@ También necesitarás las claves de Supabase:
 
 ```bash
 git clone <URL_DEL_REPO>
-cd nails-schedule
+cd agendate
 ```
 
 ### 4.2 Configurar Supabase
@@ -259,7 +259,7 @@ Sugerencias para futuro:
 Estructura simplificada del proyecto:
 
 ```text
-nails-schedule/
+agendate/
 ├─ backend/
 │  ├─ src/
 │  │  ├─ controllers/
